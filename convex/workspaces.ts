@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireOrgMember } from "./lib/auth";
@@ -30,6 +30,7 @@ export const ensureForCurrentUser = mutation({
     name: v.string(),
     clerkOrgId: v.optional(v.string()),
     slug: v.optional(v.string()),
+    aiProvider: v.optional(v.union(v.literal("openai"), v.literal("gemini"))),
     ownerClerkUserId: v.string(),
   }),
   handler: async (ctx) => {
@@ -103,6 +104,7 @@ export const ensureForCurrentUser = mutation({
       name: ws.name,
       clerkOrgId: ws.clerkOrgId,
       slug: ws.slug,
+      aiProvider: ws.aiProvider,
       ownerClerkUserId: ws.ownerClerkUserId,
     };
   },
@@ -120,6 +122,7 @@ export const getByOrg = query({
       name: v.string(),
       clerkOrgId: v.optional(v.string()),
       slug: v.optional(v.string()),
+      aiProvider: v.optional(v.union(v.literal("openai"), v.literal("gemini"))),
     }),
     v.null(),
   ),
@@ -140,7 +143,23 @@ export const getByOrg = query({
       name: ws.name,
       clerkOrgId: ws.clerkOrgId,
       slug: ws.slug,
+      aiProvider: ws.aiProvider,
     };
+  },
+});
+
+export const updateAiProvider = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    aiProvider: v.union(v.literal("openai"), v.literal("gemini")),
+  },
+  returns: v.null(),
+  handler: async (ctx, { workspaceId, aiProvider }) => {
+    await requireOrgMember(ctx);
+    // In a real app we'd verify the caller is admin of this specific workspace,
+    // but the `requireOrgMember` guard asserts they belong to the active org.
+    await ctx.db.patch(workspaceId, { aiProvider });
+    return null;
   },
 });
 
@@ -157,5 +176,12 @@ export const getPublic = query({
     if (!ws) return null;
     // Leak guard: never expose ownerClerkUserId / clerkOrgId on the public path.
     return { _id: ws._id, name: ws.name };
+  },
+});
+
+export const getDirect = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, { workspaceId }) => {
+    return await ctx.db.get(workspaceId);
   },
 });

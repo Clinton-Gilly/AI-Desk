@@ -62,7 +62,7 @@ export const reindex = internalAction({
       return null;
     }
 
-    const embeddings = await embedTexts(pieces);
+    const embeddings = await embedTexts(ctx, article.workspaceId, pieces);
     const chunks = pieces.map((text, i) => ({
       text,
       embedding: embeddings[i],

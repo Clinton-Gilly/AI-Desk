@@ -1,6 +1,7 @@
 "use client";
 
 import { useConvexAuth, useQuery } from "convex/react";
+import { useTheme } from "next-themes";
 import { OrganizationProfile } from "@clerk/nextjs";
 import { ShieldAlert, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { api } from "@/convex/_generated/api";
@@ -23,6 +24,8 @@ export default function TeamPage() {
     api.workspaces.getActiveWorkspace,
     isAuthenticated ? {} : "skip",
   );
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   if (active === undefined) {
     return (
@@ -92,9 +95,9 @@ export default function TeamPage() {
                 routing="hash"
                 appearance={{
                   variables: {
-                    colorPrimary: "#5746f0",
-                    colorForeground: "#0a0918",
-                    colorMutedForeground: "#6b7280",
+                    colorPrimary: isDark ? "#ffffff" : "#5746f0",
+                    colorForeground: isDark ? "#ffffff" : "#0a0918",
+                    colorMutedForeground: isDark ? "#a3a3a3" : "#6b7280",
                     colorBackground: "transparent",
                     borderRadius: "0.75rem",
                     fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
@@ -104,8 +107,9 @@ export default function TeamPage() {
                     cardBox: "w-full shadow-none border-none bg-transparent",
                     navbar: "hidden",
                     pageScrollBox: "p-0",
-                    formButtonPrimary:
-                      "bg-gradient-to-br from-[#5746f0] to-[#9b6bff] text-white shadow-[0_8px_24px_-8px_#5746f0] hover:opacity-95 normal-case",
+                    formButtonPrimary: isDark
+                      ? "bg-white text-black hover:opacity-95 normal-case"
+                      : "bg-gradient-to-br from-[#5746f0] to-[#9b6bff] text-white shadow-[0_8px_24px_-8px_#5746f0] hover:opacity-95 normal-case",
                     badge: "rounded-full",
                   },
                 }}

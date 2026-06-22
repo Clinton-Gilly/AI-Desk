@@ -186,7 +186,7 @@ function Features() {
           {/* Wide closing feature */}
           <Reveal delay={0.3} className="lg:col-span-6">
             <div className="group relative flex h-full flex-col items-start gap-6 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-card transition-all duration-300 hover:border-brand/30 hover:shadow-elevated sm:flex-row sm:items-center sm:p-8">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)]">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-white text-black shadow-lg shadow-white/5">
                 <Hand className="size-6" />
               </div>
               <div className="flex-1">
@@ -200,7 +200,7 @@ function Features() {
                 </p>
               </div>
               <div className="flex -space-x-2">
-                {["from-rose-400 to-orange-400", "from-sky-400 to-indigo-400", "from-emerald-400 to-teal-400"].map(
+                {["from-neutral-200 to-neutral-400", "from-neutral-400 to-neutral-600", "from-neutral-600 to-neutral-800"].map(
                   (c, idx) => (
                     <span
                       key={idx}
@@ -236,7 +236,7 @@ function FeatureCard({
         aria-hidden
         className="pointer-events-none absolute -right-12 -top-12 size-32 rounded-full bg-brand/5 opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
       />
-      <div className="relative flex size-11 items-center justify-center rounded-xl bg-brand/10 text-brand transition-transform duration-300 group-hover:scale-110 group-hover:bg-brand/15">
+      <div className="relative flex size-11 items-center justify-center rounded-xl bg-white/10 text-white transition-transform duration-300 group-hover:scale-110 group-hover:bg-white/15">
         <Icon className="size-5" />
       </div>
       <h3 className="relative mt-5 text-lg font-semibold tracking-tight">
@@ -258,11 +258,7 @@ function Stats() {
           aria-hidden
           className="pointer-events-none absolute inset-0"
         >
-          <div className="animate-aurora absolute -left-10 -top-20 size-72 rounded-full bg-brand/30 blur-[100px]" />
-          <div
-            className="animate-aurora absolute -bottom-24 right-0 size-72 rounded-full bg-brand-2/25 blur-[100px]"
-            style={{ animationDelay: "-7s" }}
-          />
+          {/* Auroras removed for flat theme */}
         </div>
         <div className="relative grid grid-cols-2 gap-8 text-center sm:grid-cols-4">
           {STATS.map((s) => (
@@ -306,10 +302,10 @@ function HowItWorks() {
           {STEPS.map((s, i) => (
             <Reveal key={s.title} delay={i * 0.1} className="relative">
               <div className="flex items-center gap-3">
-                <span className="relative z-10 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-base font-semibold text-white shadow-[0_8px_24px_-8px_var(--brand)] ring-4 ring-background">
+                <span className="relative z-10 flex size-12 items-center justify-center rounded-2xl bg-white text-base font-semibold text-black shadow-lg shadow-white/5 ring-4 ring-background">
                   {i + 1}
                 </span>
-                <span className="flex size-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 text-white">
                   <s.icon className="size-5" />
                 </span>
               </div>
@@ -327,7 +323,7 @@ function HowItWorks() {
           <Button
             asChild
             size="lg"
-            className="group h-12 rounded-full bg-gradient-to-br from-brand to-brand-2 px-7 text-base text-white shadow-[0_10px_40px_-10px_var(--brand)] hover:opacity-95"
+            className="group h-12 rounded-full bg-white px-7 text-base font-medium text-black shadow-lg shadow-white/5 hover:bg-white/90"
           >
             <Link href="/sign-up">
               Get started free
@@ -349,7 +345,7 @@ function FinalCta() {
   ];
   return (
     <section className="mx-auto w-full max-w-6xl px-6 pb-24 sm:pb-32">
-      <Reveal className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand via-brand to-brand-2 px-8 py-16 text-center text-white sm:px-16 sm:py-20">
+      <Reveal className="relative overflow-hidden rounded-[2rem] bg-zinc-900 border border-white/10 px-8 py-16 text-center text-white sm:px-16 sm:py-20">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-40"
@@ -382,7 +378,7 @@ function FinalCta() {
           <Button
             asChild
             size="lg"
-            className="h-12 w-full rounded-full bg-white px-7 text-base font-medium text-brand hover:bg-white/90 sm:w-auto"
+            className="h-12 w-full rounded-full bg-white px-7 text-base font-medium text-black hover:bg-white/90 sm:w-auto"
           >
             <Link href="/sign-up">Start free</Link>
           </Button>
@@ -437,10 +433,23 @@ function SiteFooter() {
         </div>
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/45 sm:flex-row">
           <p>© {new Date().getFullYear()} MyChat. All rights reserved.</p>
-          <p className="flex items-center gap-1.5">
-            <Sparkles className="size-3.5 text-brand-2" />
-            Built for support teams who care.
-          </p>
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-6">
+            <p className="flex items-center gap-1.5">
+              <Sparkles className="size-3.5 text-brand-2" />
+              Built for support teams who care.
+            </p>
+            <p>
+              Powered by{" "}
+              <a
+                href="https://xuremi.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white hover:text-brand-2 transition-colors"
+              >
+                Xuremi
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </footer>

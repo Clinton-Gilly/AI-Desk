@@ -97,14 +97,17 @@ function convexErrorMessage(err: unknown, fallback: string): string {
 
 export function CustomizerEditor({
   workspaceId,
+  initialAiProvider,
 }: {
   workspaceId: Id<"workspaces">;
+  initialAiProvider?: "openai" | "gemini";
 }) {
   const serverAppearance = useQuery(api.widget.getAppearance, {});
   const serverSettings = useQuery(api.widget.getSettings, {});
 
   const updateAppearance = useMutation(api.widget.updateAppearance);
   const updateSettings = useMutation(api.widget.updateSettings);
+  const updateAiProvider = useMutation(api.workspaces.updateAiProvider);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
   const finalizeImageUpload = useMutation(api.files.finalizeImageUpload);
 
@@ -112,6 +115,7 @@ export function CustomizerEditor({
   // the form owns the truth until a Save (which re-syncs from the server).
   const [appearance, setAppearance] = useState<Appearance | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [aiProvider, setAiProvider] = useState<"openai" | "gemini">(initialAiProvider || "openai");
   // Logo: a pending storageId not yet persisted (cleared on save). `null` here
   // distinguishes "clear the logo" from "leave unchanged" (undefined).
   const [pendingLogoId, setPendingLogoId] = useState<
@@ -137,9 +141,10 @@ export function CustomizerEditor({
     if (serverAppearance && serverSettings) {
       setAppearance(serverAppearance);
       setSettings(serverSettings);
+      setAiProvider(initialAiProvider || "openai");
       hydratedRef.current = true;
     }
-  }, [serverAppearance, serverSettings]);
+  }, [serverAppearance, serverSettings, initialAiProvider]);
 
   const loading = !appearance || !settings;
 
@@ -227,6 +232,10 @@ export function CustomizerEditor({
           leadCapture: settings.leadCapture,
           faqEnabled: settings.faqEnabled,
         }),
+        updateAiProvider({
+          workspaceId,
+          aiProvider,
+        }),
       ]);
       // Re-sync from server on next reactive fire + reset pending logo state.
       hydratedRef.current = false;
@@ -245,6 +254,7 @@ export function CustomizerEditor({
     if (serverAppearance && serverSettings) {
       setAppearance(serverAppearance);
       setSettings(serverSettings);
+      setAiProvider(initialAiProvider || "openai");
       setPendingLogoId(undefined);
       setPendingLogoUrl(null);
       toast.info("Reverted unsaved changes.");
@@ -477,6 +487,28 @@ export function CustomizerEditor({
           <TabsContent value="behaviour" className="mt-6 space-y-6">
             <Section
               icon={Sparkles}
+              title="AI Assistant Provider"
+              description="Choose which AI model powers the chat assistant and crawling embeddings. Note: changing this will require re-crawling."
+            >
+              <div className="space-y-2">
+                <Label htmlFor="ai-provider">Model Provider</Label>
+                <Select
+                  value={aiProvider}
+                  onValueChange={(v) => setAiProvider(v as "openai" | "gemini")}
+                >
+                  <SelectTrigger id="ai-provider" className="w-full">
+                    <SelectValue placeholder="Select a provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI (gpt-4o-mini)</SelectItem>
+                    <SelectItem value="gemini">Gemini (gemini-2.5-flash)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </Section>
+
+            <Section
+              icon={Sparkles}
               title="Proactive message"
               description="Pop a message after a visitor lingers."
               action={
@@ -584,7 +616,7 @@ export function CustomizerEditor({
                           <span
                             className={`grid size-4 shrink-0 place-items-center rounded-[5px] border transition-colors ${
                               checked
-                                ? "border-brand bg-brand text-white"
+                                ? "border-brand bg-brand text-[var(--brand-text)]"
                                 : "border-input"
                             }`}
                           >
@@ -697,7 +729,7 @@ export function CustomizerEditor({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+            className="bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
           >
             {saving ? (
               <Loader2 className="size-4 animate-spin" />

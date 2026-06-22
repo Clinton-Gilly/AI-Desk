@@ -82,7 +82,7 @@ export function SiteHeader() {
             <SignUpButton mode="modal">
               <Button
                 size="sm"
-                className="group hidden rounded-full bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_6px_20px_-6px_var(--brand)] hover:opacity-95 sm:inline-flex"
+                className="group hidden rounded-full bg-white text-black shadow-md shadow-white/5 hover:bg-white/90 sm:inline-flex"
               >
                 Start free
                 <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -135,7 +135,7 @@ export function SiteHeader() {
                 <SignUpButton mode="modal">
                   <Button
                     size="sm"
-                    className="bg-gradient-to-br from-brand to-brand-2 text-white"
+                    className="bg-white text-black hover:bg-white/90"
                   >
                     Start free
                   </Button>

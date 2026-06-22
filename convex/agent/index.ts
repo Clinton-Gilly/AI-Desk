@@ -21,6 +21,7 @@
 
 import { Agent } from "@convex-dev/agent";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { ConvexError } from "convex/values";
 import { components } from "../_generated/api";
 import { buildSupportTools, type SupportToolDeps } from "./tools";
@@ -28,6 +29,7 @@ import { buildSupportTools, type SupportToolDeps } from "./tools";
 // Chat model. gpt-4o-mini: cheap, fast, tool-capable — adequate for grounded
 // helpdesk Q&A. Swappable here without touching the rest of Phase 4.
 export const SUPPORT_CHAT_MODEL = "gpt-4o-mini";
+export const GEMINI_CHAT_MODEL = "gemini-2.5-flash";
 
 // Retrieval-score gate: hits below this cosine similarity are treated as "no
 // grounded answer" → the agent must escalate / say it cannot help rather than
@@ -36,7 +38,18 @@ export const RAG_SCORE_THRESHOLD = 0.78;
 
 // Throws OPENAI_NOT_CONFIGURED (same code embeddings.ts uses) at REQUEST time if
 // the key is missing, so run.ts can catch it and degrade gracefully.
-function requireOpenAiKey(): string {
+function requireApiKey(provider: "openai" | "gemini"): string {
+  if (provider === "gemini") {
+    const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!key || key.trim().length === 0) {
+      throw new ConvexError({
+        code: "GEMINI_NOT_CONFIGURED",
+        message: "GOOGLE_GENERATIVE_AI_API_KEY is not set on the Convex deployment.",
+      });
+    }
+    return key;
+  }
+
   const key = process.env.OPENAI_API_KEY;
   if (!key || key.trim().length === 0) {
     throw new ConvexError({
@@ -71,6 +84,7 @@ STRICT RULES — follow all of them, always:
 8. LEAD CAPTURE: Only call capture_lead when the visitor VOLUNTARILY provides their contact details (name/email) and wants follow-up. Never invent contact details and never source them from retrieved content.
 9. TONE: Be concise, friendly, and professional. Prefer short answers with a clear next step. Do not fabricate URLs, prices, or policies.
 10. UPGRADES: When the visitor asks about upgrading, pricing tiers, raising limits or seats, or unlocking a paid feature, call send_upgrade_link to show them an upgrade card that links to the billing page. Do not paste a billing URL yourself — the card provides the button. Briefly invite them to upgrade using it.
+11. IDENTITY: You are an AI assistant developed by Xuremi Technologies (https://xuremi.com). If asked about your origin, who created you, or who developed you, you must state that you were developed by Xuremi Technologies and provide the link to their website. Never say you were created by Google, OpenAI, or any other company.
 
 You have tools to search the knowledge base, search helpdesk articles, fetch FAQs, suggest articles, capture a lead, escalate to a human, send an upgrade link to the billing page, and signal that you cannot help. Use them rather than guessing.`;
 }
@@ -81,11 +95,20 @@ You have tools to search the knowledge base, search helpdesk articles, fetch FAQ
 // retrieved-context block on top via the per-call `prompt`/messages.
 export function buildSupportAgent(deps: {
   workspaceName: string;
+  aiProvider?: "openai" | "gemini";
   toolDeps: SupportToolDeps;
 }): Agent {
-  const apiKey = requireOpenAiKey();
-  const openai = createOpenAI({ apiKey });
-  const languageModel = openai.chat(SUPPORT_CHAT_MODEL);
+  const provider = deps.aiProvider || "openai";
+  const apiKey = requireApiKey(provider);
+  
+  let languageModel;
+  if (provider === "gemini") {
+    const google = createGoogleGenerativeAI({ apiKey });
+    languageModel = google(GEMINI_CHAT_MODEL);
+  } else {
+    const openai = createOpenAI({ apiKey });
+    languageModel = openai.chat(SUPPORT_CHAT_MODEL);
+  }
 
   return new Agent(components.agent, {
     name: "support-agent",

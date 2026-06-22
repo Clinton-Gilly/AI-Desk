@@ -16,11 +16,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { embedMany } from "ai";
 import { ConvexError, v } from "convex/values";
-import { internalAction } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 export const EMBEDDING_MODEL = "text-embedding-3-small";
+export const GEMINI_EMBEDDING_MODEL = "gemini-embedding-2";
 export const EMBEDDING_DIMENSIONS = 1536;
 
 // OpenAI's embeddings endpoint accepts many inputs per request; cap our batch so
@@ -28,7 +32,19 @@ export const EMBEDDING_DIMENSIONS = 1536;
 // memory/time budget. embedMany also auto-chunks, but we keep an explicit cap.
 const MAX_BATCH = 96;
 
-function getApiKey(): string {
+function getApiKey(provider: "openai" | "gemini"): string {
+  if (provider === "gemini") {
+    const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!key || key.trim().length === 0) {
+      throw new ConvexError({
+        code: "GEMINI_NOT_CONFIGURED",
+        message:
+          "GOOGLE_GENERATIVE_AI_API_KEY is not set on the Convex deployment.",
+      });
+    }
+    return key;
+  }
+  
   const key = process.env.OPENAI_API_KEY;
   if (!key || key.trim().length === 0) {
     throw new ConvexError({
@@ -47,12 +63,27 @@ function getApiKey(): string {
  *
  * Throws OPENAI_NOT_CONFIGURED (at call time) if the key is missing.
  */
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(
+  ctx: ActionCtx,
+  workspaceId: Id<"workspaces">,
+  texts: string[]
+): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const apiKey = getApiKey();
-  const openai = createOpenAI({ apiKey });
-  const model = openai.textEmbeddingModel(EMBEDDING_MODEL);
+  // Fetch the full workspace to get aiProvider
+  const fullWorkspace = await ctx.runQuery(internal.workspaces.getDirect, { workspaceId });
+  const provider = fullWorkspace?.aiProvider || "openai";
+
+  const apiKey = getApiKey(provider as "openai" | "gemini");
+  
+  let model;
+  if (provider === "gemini") {
+    const google = createGoogleGenerativeAI({ apiKey });
+    model = google.textEmbeddingModel(GEMINI_EMBEDDING_MODEL);
+  } else {
+    const openai = createOpenAI({ apiKey });
+    model = openai.textEmbeddingModel(EMBEDDING_MODEL);
+  }
 
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += MAX_BATCH) {
@@ -60,17 +91,21 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     const { embeddings } = await embedMany({
       model,
       values: batch,
-      // text-embedding-3-small is natively 1536; no dimension override needed.
-      maxRetries: 2,
     });
     for (const e of embeddings) {
-      if (e.length !== EMBEDDING_DIMENSIONS) {
-        throw new ConvexError({
-          code: "EMBEDDING_DIM_MISMATCH",
-          message: `Expected ${EMBEDDING_DIMENSIONS}-dim embedding, got ${e.length}.`,
-        });
+      let vector = e as number[];
+      
+      // Ensure embedding is exactly 1536 dimensions
+      if (vector.length < EMBEDDING_DIMENSIONS) {
+        vector = [
+          ...vector,
+          ...new Array(EMBEDDING_DIMENSIONS - vector.length).fill(0),
+        ];
+      } else if (vector.length > EMBEDDING_DIMENSIONS) {
+        vector = vector.slice(0, EMBEDDING_DIMENSIONS);
       }
-      out.push(e as number[]);
+      
+      out.push(vector);
     }
   }
   return out;
@@ -80,9 +115,9 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 // that can't import this Node file) can embed via `ctx.runAction`. Most callers
 // in this project are themselves Node actions and use `embedTexts` directly.
 export const embed = internalAction({
-  args: { texts: v.array(v.string()) },
+  args: { workspaceId: v.id("workspaces"), texts: v.array(v.string()) },
   returns: v.array(v.array(v.float64())),
-  handler: async (_ctx, { texts }) => {
-    return await embedTexts(texts);
+  handler: async (ctx, { workspaceId, texts }) => {
+    return await embedTexts(ctx, workspaceId, texts);
   },
 });

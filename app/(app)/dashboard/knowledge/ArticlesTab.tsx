@@ -127,7 +127,7 @@ export function ArticlesTab() {
         </div>
         <Button
           onClick={openCreate}
-          className="bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+          className="bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
         >
           <Plus className="size-4" />
           New article
@@ -164,7 +164,7 @@ export function ArticlesTab() {
           </p>
           <Button
             onClick={openCreate}
-            className="mt-6 bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+            className="mt-6 bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
           >
             <Plus className="size-4" />
             New article
@@ -642,7 +642,7 @@ function ArticleEditor({
               <Button
                 type="submit"
                 disabled={submitting || uploading}
-                className="bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+                className="bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
               >
                 {submitting ? (
                   <Loader2 className="size-4 animate-spin" />

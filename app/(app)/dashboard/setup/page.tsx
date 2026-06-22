@@ -181,7 +181,7 @@ export default function SetupPage() {
                 </div>
                 <Button
                   asChild
-                  className="bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 sm:shrink-0"
+                  className="bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 sm:shrink-0"
                 >
                   <a href={demoUrl} target="_blank" rel="noreferrer">
                     Open demo site

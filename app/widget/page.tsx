@@ -344,14 +344,14 @@ export default function WidgetPage() {
 function PoweredByFooter() {
   return (
     <a
-      href="/"
+      href="https://xuremi.com"
       target="_blank"
       rel="noopener noreferrer"
       className="group flex shrink-0 items-center justify-center gap-1 border-t border-neutral-100 bg-white py-2.5 text-[11px] tracking-tight text-neutral-400 transition-colors hover:text-[var(--wc-button)]"
     >
       Powered by{" "}
       <span className="font-semibold text-neutral-500 transition-colors group-hover:text-[var(--wc-button)]">
-        MyChat
+        Xuremi
       </span>
     </a>
   );

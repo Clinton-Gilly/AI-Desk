@@ -305,7 +305,7 @@ export const processCrawlBatch = internalAction({
           }).slice(0, MAX_CHUNKS_PER_PAGE);
 
           if (pieces.length > 0) {
-            const embeddings = await embedTexts(pieces);
+            const embeddings = await embedTexts(ctx, job.workspaceId, pieces);
             const chunks = pieces.map((t, i) => ({
               text: t,
               embedding: embeddings[i],
@@ -329,7 +329,8 @@ export const processCrawlBatch = internalAction({
           crawlJobId,
           chunksAdded,
         });
-      } catch {
+      } catch (e) {
+        console.error("Error processing page", page.url, e);
         await ctx.runMutation(internal.crawler.markPageError, {
           queueId: page._id,
         });

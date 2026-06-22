@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/sidebar";
 import { BrandMark } from "@/app/_components/brand-mark";
 import { api } from "@/convex/_generated/api";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type NavItem = {
   title: string;
@@ -142,7 +143,7 @@ export function DashboardSidebar() {
                       </Link>
                     </SidebarMenuButton>
                     {item.href === "/dashboard" && inboxBadge > 0 ? (
-                      <SidebarMenuBadge className="bg-brand text-white peer-data-[active=true]/menu-button:text-white">
+                      <SidebarMenuBadge className="bg-brand text-[var(--brand-text)] peer-data-[active=true]/menu-button:text-white">
                         {inboxBadge > 99 ? "99+" : inboxBadge}
                       </SidebarMenuBadge>
                     ) : null}
@@ -180,11 +181,16 @@ export function DashboardSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-2">
-        <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <UserButton appearance={{ elements: { rootBox: "shrink-0" } }} />
-          <span className="truncate text-sm font-medium text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">
-            Account
-          </span>
+        <div className="flex items-center justify-between gap-2.5 rounded-lg px-1.5 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <div className="flex items-center gap-2.5">
+            <UserButton appearance={{ elements: { rootBox: "shrink-0" } }} />
+            <span className="truncate text-sm font-medium text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">
+              Account
+            </span>
+          </div>
+          <div className="group-data-[collapsible=icon]:hidden">
+            <ThemeToggle />
+          </div>
         </div>
       </SidebarFooter>
     </Sidebar>

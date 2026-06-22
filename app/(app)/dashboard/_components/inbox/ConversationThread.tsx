@@ -99,7 +99,7 @@ function MessageRow({ message }: { message: Message }) {
           isAgent
             ? isAi
               ? "rounded-2xl rounded-br-md border border-brand/20 bg-brand/5 text-foreground"
-              : "rounded-2xl rounded-br-md bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-12px_var(--brand)]"
+              : "rounded-2xl rounded-br-md bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-12px_var(--brand)]"
             : "rounded-2xl rounded-bl-md border border-border bg-card text-foreground",
         )}
       >
@@ -191,7 +191,7 @@ function Composer({
         />
         <Button
           size="icon"
-          className="size-10 shrink-0 rounded-xl bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 disabled:from-muted-foreground/40 disabled:to-muted-foreground/40 disabled:opacity-100 disabled:shadow-none"
+          className="size-10 shrink-0 rounded-xl bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 disabled:from-muted-foreground/40 disabled:to-muted-foreground/40 disabled:opacity-100 disabled:shadow-none"
           disabled={sending || text.trim().length === 0}
           onClick={() => void submit()}
           aria-label="Send reply"

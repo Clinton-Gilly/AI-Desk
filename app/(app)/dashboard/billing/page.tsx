@@ -32,7 +32,7 @@ import {
   planName,
   statusLabel,
 } from "@/lib/planDisplay";
-import type { Feature } from "@/convex/lib/plans";
+import { planFeatures, type Feature } from "@/convex/lib/plans";
 
 // Clerk plan ids for the bespoke <CheckoutButton> (dev vs prod differ — sourced
 // from env, never hardcoded). When unset, the Upgrade CTA falls back to /pricing.
@@ -132,7 +132,7 @@ export default function BillingPage() {
         for="organization"
         newSubscriptionRedirectUrl="/dashboard/billing"
       >
-        <Button className="from-brand to-brand-2 bg-gradient-to-br text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95">
+        <Button className="from-brand to-brand-2 bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95">
           {upgrade.label}
           <ArrowUpRight className="size-4" />
         </Button>
@@ -141,7 +141,7 @@ export default function BillingPage() {
       // Top tier (Scale) or plan ids not configured → see all plans.
       <Button
         asChild
-        className="from-brand to-brand-2 bg-gradient-to-br text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+        className="from-brand to-brand-2 bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
       >
         <Link href="/pricing">
           {isFree ? "Upgrade" : "Change plan"}
@@ -151,8 +151,9 @@ export default function BillingPage() {
     );
 
   const featureKeys = Object.keys(FEATURE_LABELS) as Feature[];
+  const liveFeatures = planFeatures(livePlanSlug);
   const includedCount = featureKeys.filter((f) =>
-    overview.features.includes(f),
+    liveFeatures.includes(f),
   ).length;
 
   return (
@@ -194,7 +195,7 @@ export default function BillingPage() {
 
         <div className="relative flex flex-wrap items-start justify-between gap-4 border-b p-6">
           <div className="flex items-center gap-4">
-            <div className="from-brand to-brand-2 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-[0_8px_24px_-8px_var(--brand)]">
+            <div className="from-brand to-brand-2 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)]">
               <CreditCard className="size-6" />
             </div>
             <div>
@@ -259,7 +260,7 @@ export default function BillingPage() {
         <CardContent>
           <ul className="grid gap-px overflow-hidden rounded-xl border sm:grid-cols-2">
             {featureKeys.map((feature) => {
-              const included = overview.features.includes(feature);
+              const included = liveFeatures.includes(feature);
               return (
                 <li
                   key={feature}

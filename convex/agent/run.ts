@@ -101,6 +101,7 @@ export const respondToVisitorMessage = internalAction({
       let upgradeCard: UpgradeCard | null = null;
       const agent = buildSupportAgent({
         workspaceName: workspace.name,
+        aiProvider: workspace.aiProvider as "openai" | "gemini" | undefined,
         toolDeps: {
           workspaceId: workspace._id,
           conversationId,
@@ -165,12 +166,7 @@ export const respondToVisitorMessage = internalAction({
         ctx,
         { threadId },
         {
-          messages: [
-            {
-              role: "system",
-              content: retrieval.contextBlock,
-            },
-          ],
+          system: retrieval.contextBlock,
           prompt: visitorText,
           tools: agent.options.tools,
           stopWhen: stepCountIs(MAX_STEPS),
@@ -218,7 +214,7 @@ export const respondToVisitorMessage = internalAction({
           ? (err.data as { code?: string }).code
           : undefined;
 
-      if (code === OPENAI_NOT_CONFIGURED_CODE) {
+      if (code === OPENAI_NOT_CONFIGURED_CODE || code === "GEMINI_NOT_CONFIGURED") {
         await ctx.runMutation(internal.agent.runHelpers.postSystem, {
           conversationId,
           expectedEpoch: runEpoch,

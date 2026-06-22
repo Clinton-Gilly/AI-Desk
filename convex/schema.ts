@@ -21,6 +21,7 @@ export default defineSchema({
     ownerClerkUserId: v.string(), // kept: creator convenience, NOT the auth boundary
     clerkOrgId: v.optional(v.string()), // Clerk Organization id — REAL tenant key (enforced in code)
     slug: v.optional(v.string()),
+    aiProvider: v.optional(v.union(v.literal("openai"), v.literal("gemini"))),
   })
     .index("by_owner", ["ownerClerkUserId"])
     .index("by_org", ["clerkOrgId"]),

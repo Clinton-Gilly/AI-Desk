@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
@@ -46,7 +47,14 @@ export default function RootLayout({
     >
       <body>
         <ClerkProvider>
-          {children}
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
         </ClerkProvider>
       </body>
     </html>

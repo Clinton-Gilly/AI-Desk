@@ -71,7 +71,7 @@ export const ingestDocument = internalAction({
       return { inserted: 0, skipped: 0 };
     }
 
-    const embeddings = await embedTexts(pieces);
+    const embeddings = await embedTexts(ctx, args.workspaceId, pieces);
     const chunks = pieces.map((text, i) => ({
       text,
       embedding: embeddings[i],

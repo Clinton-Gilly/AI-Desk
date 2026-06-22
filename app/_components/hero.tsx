@@ -30,18 +30,7 @@ export function Hero() {
   return (
     <MotionConfig reducedMotion="user">
       <section className="relative overflow-hidden bg-ink text-white">
-        {/* Aurora */}
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <div className="animate-aurora absolute -top-40 left-[15%] size-[34rem] rounded-full bg-brand/40 blur-[130px]" />
-          <div
-            className="animate-aurora absolute -top-10 right-[5%] size-[30rem] rounded-full bg-brand-2/30 blur-[130px]"
-            style={{ animationDelay: "-6s" }}
-          />
-          <div
-            className="animate-aurora absolute bottom-[-8rem] left-[8%] size-[28rem] rounded-full bg-brand-3/25 blur-[130px]"
-            style={{ animationDelay: "-12s" }}
-          />
-        </div>
+        {/* Aurora - Removed for flat Uber theme */}
         {/* Dotgrid + grain texture */}
         <div
           aria-hidden
@@ -98,7 +87,7 @@ export function Hero() {
               <Button
                 asChild
                 size="lg"
-                className="group h-12 w-full rounded-full bg-gradient-to-br from-brand to-brand-2 px-7 text-base text-white shadow-[0_10px_40px_-10px_var(--brand)] hover:opacity-95 sm:w-auto"
+                className="group h-12 w-full rounded-full bg-white px-7 text-base font-medium text-black shadow-lg shadow-white/5 hover:bg-white/90 sm:w-auto"
               >
                 <Link href="/sign-up">
                   Start free
@@ -146,7 +135,7 @@ export function Hero() {
           >
             <div
               aria-hidden
-              className="absolute -inset-10 rounded-full bg-brand/25 blur-[90px]"
+              className="absolute -inset-10 rounded-full bg-white/5 blur-[90px]"
             />
 
             {/* Floating proof cards */}
@@ -154,15 +143,15 @@ export function Hero() {
               className="animate-float absolute -left-6 top-10 z-20 hidden sm:block"
               style={{ animationDelay: "-2s" }}
             >
-              <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/95 px-3 py-2.5 shadow-xl backdrop-blur">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+              <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-zinc-900/95 px-3 py-2.5 shadow-xl backdrop-blur">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
                   <UserPlus className="size-4" />
                 </span>
                 <div className="text-left">
-                  <p className="text-[11px] font-medium text-zinc-500">
+                  <p className="text-[11px] font-medium text-zinc-400">
                     New lead captured
                   </p>
-                  <p className="text-xs font-semibold text-zinc-800">
+                  <p className="text-xs font-semibold text-white">
                     alex@northwind.com
                   </p>
                 </div>
@@ -173,16 +162,16 @@ export function Hero() {
               className="animate-float absolute -right-5 bottom-12 z-20 hidden sm:block"
               style={{ animationDelay: "-4.5s" }}
             >
-              <div className="rounded-xl border border-white/10 bg-white/95 px-4 py-3 text-left shadow-xl backdrop-blur">
+              <div className="rounded-xl border border-white/10 bg-zinc-900/95 px-4 py-3 text-left shadow-xl backdrop-blur">
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="size-3.5 text-brand" />
-                  <p className="text-[11px] font-medium text-zinc-500">
+                  <CheckCircle2 className="size-3.5 text-white" />
+                  <p className="text-[11px] font-medium text-zinc-400">
                     Resolved by AI
                   </p>
                 </div>
-                <p className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-900">
+                <p className="mt-0.5 text-xl font-semibold tracking-tight text-white">
                   73%
-                  <span className="ml-1.5 text-[11px] font-medium text-emerald-600">
+                  <span className="ml-1.5 text-[11px] font-medium text-emerald-400">
                     +12%
                   </span>
                 </p>

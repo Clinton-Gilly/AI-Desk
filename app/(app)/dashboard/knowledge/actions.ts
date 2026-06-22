@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { fetchMutation } from "convex/nextjs";
 import { ConvexError } from "convex/values";
 import { api } from "@/convex/_generated/api";
-import { PLANS, type PlanSlug } from "@/convex/lib/plans";
+import { PLANS, planHasFeature, type PlanSlug } from "@/convex/lib/plans";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crawl entitlement is enforced HERE, server-side, via Clerk's `has()`.
@@ -34,15 +34,17 @@ export async function startCrawlAction(
     return { ok: false, error: "Select or create an organization first." };
   }
 
+  const livePlan = resolvePlanSlug(has);
+
   // Authoritative, live entitlement check.
-  if (!has({ feature: "website_crawl" })) {
+  if (!planHasFeature(livePlan, "website_crawl") && !has({ feature: "website_crawl" })) {
     return {
       ok: false,
       error: "Website crawling is not included in your plan.",
     };
   }
 
-  const maxPages = PLANS[resolvePlanSlug(has)].limits.crawlPages;
+  const maxPages = PLANS[livePlan].limits.crawlPages;
 
   // Pass the Clerk-issued Convex JWT so the mutation runs as this admin.
   const token = await getToken({ template: "convex" });

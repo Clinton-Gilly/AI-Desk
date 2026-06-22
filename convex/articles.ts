@@ -460,6 +460,7 @@ export const getForReindex = internalQuery({
       bodyMarkdown: v.string(),
       excerpt: v.optional(v.string()),
       status: v.union(v.literal("draft"), v.literal("published")),
+      workspaceId: v.id("workspaces"),
     }),
     v.null(),
   ),
@@ -472,6 +473,7 @@ export const getForReindex = internalQuery({
       bodyMarkdown: article.bodyMarkdown,
       excerpt: article.excerpt,
       status: article.status,
+      workspaceId: article.workspaceId,
     };
   },
 });

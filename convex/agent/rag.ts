@@ -75,7 +75,7 @@ export async function retrieveContext(
   }
 
   // 1) Embed the query (1536-dim, same model as ingestion).
-  const [embedding] = await embedTexts([cleaned]);
+  const [embedding] = await embedTexts(ctx, workspaceId, [cleaned]);
   if (!embedding) {
     return {
       matches: [],

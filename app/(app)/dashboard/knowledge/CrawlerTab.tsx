@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -40,6 +41,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useHasFeature } from "@/lib/entitlement";
 import { toast } from "sonner";
 import { startCrawlAction } from "./actions";
@@ -66,8 +74,14 @@ function convexErrorMessage(err: unknown, fallback: string): string {
 
 export function CrawlerTab() {
   const { isLoaded, allowed: crawlAllowed } = useHasFeature("website_crawl");
+  const { isAuthenticated } = useConvexAuth();
+  const active = useQuery(
+    api.workspaces.getActiveWorkspace,
+    isAuthenticated ? {} : "skip"
+  );
   const jobs = useQuery(api.crawler.listJobs, {});
   const sources = useQuery(api.kb.listSources, {});
+  const updateAiProvider = useMutation(api.workspaces.updateAiProvider);
 
   const form = useForm<CrawlForm>({
     resolver: zodResolver(crawlSchema),
@@ -108,6 +122,36 @@ export function CrawlerTab() {
               chunk and embed them into your AI knowledge base.
             </p>
 
+            {active?.ok ? (
+              <div className="mt-4 flex flex-col gap-2 rounded-xl border bg-muted/30 p-4">
+                <Label htmlFor="ai-provider" className="text-sm font-medium">
+                  AI Embedding Provider
+                </Label>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs text-muted-foreground max-w-sm">
+                    Choose the AI model used to chunk and embed these pages. Ensure this matches your chat assistant provider in the Customizer.
+                  </p>
+                  <Select
+                    value={active.workspace.aiProvider || "openai"}
+                    onValueChange={(v) => {
+                      updateAiProvider({
+                        workspaceId: active.workspace._id,
+                        aiProvider: v as "openai" | "gemini",
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="ai-provider" className="w-[180px] bg-background">
+                      <SelectValue placeholder="Select a provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="gemini">Gemini</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-5">
               {isLoaded && !crawlAllowed ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/20 bg-brand/5 p-4 text-sm">
@@ -117,7 +161,7 @@ export function CrawlerTab() {
                   <Button
                     asChild
                     size="sm"
-                    className="bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+                    className="bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
                   >
                     <a href="/pricing">Upgrade plan</a>
                   </Button>
@@ -148,7 +192,7 @@ export function CrawlerTab() {
                     <Button
                       type="submit"
                       disabled={submitting || hasRunning || !isLoaded}
-                      className="bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+                      className="bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
                     >
                       {submitting ? (
                         <Loader2 className="size-4 animate-spin" />

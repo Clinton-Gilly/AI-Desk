@@ -100,7 +100,10 @@ export default function CustomizerPage() {
         </div>
       </div>
 
-      <CustomizerEditor workspaceId={active.workspace._id} />
+      <CustomizerEditor
+        workspaceId={active.workspace._id}
+        initialAiProvider={active.workspace.aiProvider}
+      />
     </div>
   );
 }

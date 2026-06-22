@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import type { Feature, PlanSlug } from "@/convex/lib/plans";
+import { planHasFeature, type Feature, type PlanSlug } from "@/convex/lib/plans";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client-side entitlement helpers (UI gating only).
@@ -28,8 +28,16 @@ export function useEntitlements(): Entitlements {
 
   return {
     isLoaded,
-    hasFeature: (feature: Feature) =>
-      isLoaded && !!orgId && (has?.({ feature }) ?? false),
+    hasFeature: (feature: Feature) => {
+      if (!isLoaded || !orgId) return false;
+      // Fallback: check live plan directly and map locally.
+      // This prevents UI gating errors if Clerk dashboard features aren't wired up
+      // or if the webhook is lagging.
+      const livePlanSlug = (["scale", "pro", "free_org"] as const).find((slug) =>
+        has?.({ plan: slug })
+      ) ?? "free_org";
+      return planHasFeature(livePlanSlug, feature) || (has?.({ feature }) ?? false);
+    },
     hasPlan: (plan: PlanSlug) =>
       isLoaded && !!orgId && (has?.({ plan }) ?? false),
   };

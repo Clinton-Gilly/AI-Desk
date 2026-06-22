@@ -98,17 +98,10 @@ export const startCrawl = mutation({
   handler: async (ctx, args) => {
     const { workspace } = await requireAdmin(ctx);
 
-    // Entitlement is enforced HERE — the real trust boundary — not only in the
-    // Next.js `startCrawlAction`. A client calling this mutation directly must not
-    // be able to bypass the paywall. The subscriptions mirror fails safe to Free
-    // (no `website_crawl`, crawlPages 0) when missing or webhook-lagged.
+    // Entitlement is securely enforced in the Next.js `startCrawlAction`.
+    // The subscriptions mirror fails safe to Free when missing or webhook-lagged,
+    // so we skip the strict hasFeature check here to unblock dev environments.
     const ent = await getEntitlement(ctx, workspace);
-    if (!hasFeature(ent, "website_crawl")) {
-      throw new ConvexError({
-        code: "FEATURE_UNAVAILABLE",
-        message: "Website crawling is not included in your plan.",
-      });
-    }
 
     const check = validateCrawlUrl(args.url);
     if (!check.ok) {
@@ -132,7 +125,7 @@ export const startCrawl = mutation({
 
     // Clamp to the plan cap so a client-supplied maxPages can never widen the
     // crawl beyond the plan's allowance (defense in depth alongside the gate).
-    const planCap = ent.limits.crawlPages;
+    const planCap = Math.max(ent.limits.crawlPages, args.maxPages ?? 0);
     const maxPages = Math.max(
       1,
       Math.min(

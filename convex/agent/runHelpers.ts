@@ -46,6 +46,7 @@ export const loadForRun = internalQuery({
         v.object({
           _id: v.id("workspaces"),
           name: v.string(),
+          aiProvider: v.optional(v.union(v.literal("openai"), v.literal("gemini"))),
         }),
         v.null(),
       ),
@@ -72,7 +73,7 @@ export const loadForRun = internalQuery({
       agentRunEpoch: convo.agentRunEpoch,
       threadId: convo.threadId,
       lastVisitorBody: lastVisitor?.body,
-      workspace: ws ? { _id: ws._id, name: ws.name } : null,
+      workspace: ws ? { _id: ws._id, name: ws.name, aiProvider: ws.aiProvider } : null,
     };
   },
 });

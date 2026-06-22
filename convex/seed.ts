@@ -566,7 +566,7 @@ export const run = internalAction({
       const pieces = chunkText(plain, { maxTokens: MAX_TOKENS, overlap: OVERLAP });
       if (pieces.length === 0) continue;
 
-      const embeddings = await embedTexts(pieces);
+      const embeddings = await embedTexts(ctx, workspaceId, pieces);
       const chunks = pieces.map((text, idx) => ({
         text,
         embedding: embeddings[idx],
