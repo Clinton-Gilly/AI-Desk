@@ -153,6 +153,70 @@ export async function requireAdmin(ctx: QueryCtx): Promise<OrgMemberContext> {
   return member;
 }
 
+/**
+ * Assert the caller is a global platform admin.
+ * Checks the user's email against the SUPER_ADMIN_EMAILS environment variable.
+ * If SUPER_ADMIN_EMAILS is empty and we are in development, allows access.
+ */
+export async function requireGlobalAdmin(
+  ctx: QueryCtx,
+): Promise<{ subject: string; email: string; name: string | null }> {
+  const rawIdentity = await ctx.auth.getUserIdentity();
+  if (!rawIdentity) {
+    throw authError("NOT_AUTHENTICATED", "Not authenticated.");
+  }
+
+  let email = rawIdentity.email;
+  if (!email) {
+    // Attempt fallback from workspaceMembers table (webhook-synced from Clerk)
+    const claims = readOrgClaims(rawIdentity as unknown as Record<string, unknown>);
+    if (claims.orgId) {
+      const member = await ctx.db
+        .query("workspaceMembers")
+        .withIndex("by_org_user", (q) =>
+          q.eq("clerkOrgId", claims.orgId!).eq("clerkUserId", rawIdentity.subject)
+        )
+        .unique();
+      if (member?.email) email = member.email;
+    }
+    if (!email) {
+      const allMembers = await ctx.db.query("workspaceMembers").collect();
+      const member = allMembers.find((m) => m.clerkUserId === rawIdentity.subject && m.status === "active");
+      if (member?.email) email = member.email;
+    }
+  }
+
+  const adminEmailsStr = process.env.SUPER_ADMIN_EMAILS || "";
+  const adminEmails = adminEmailsStr
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isDev = process.env.CONVEX_DEPLOYMENT?.startsWith("dev:") ?? true;
+  if (adminEmails.length === 0 && isDev) {
+    return {
+      subject: rawIdentity.subject,
+      email: email ?? "",
+      name: rawIdentity.name ?? null,
+    };
+  }
+
+  // Check if either the email OR the Clerk User ID matches
+  const emailMatch = email && adminEmails.includes(email.toLowerCase());
+  const subjectMatch = adminEmails.includes(rawIdentity.subject.toLowerCase());
+
+  if (!emailMatch && !subjectMatch) {
+    const identifier = email ? `${email} (${rawIdentity.subject})` : rawIdentity.subject;
+    throw authError("FORBIDDEN", `Access denied. ${identifier} is not a registered global administrator.`);
+  }
+
+  return {
+    subject: rawIdentity.subject,
+    email: email ?? "",
+    name: rawIdentity.name ?? null,
+  };
+}
+
 // Dashboard entry point: read-only active-workspace resolver. Returns the
 // workspace + caller role, or a discriminated `error` for the org-less /
 // not-yet-provisioned states so the client can route without try/catch.

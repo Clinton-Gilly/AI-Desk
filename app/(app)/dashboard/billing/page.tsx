@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useState, useEffect } from "react";
+import { useConvexAuth, useQuery, useAction } from "convex/react";
 import { useAuth } from "@clerk/nextjs";
 import { CheckoutButton } from "@clerk/nextjs/experimental";
 import {
@@ -13,7 +14,18 @@ import {
   ShieldAlert,
   Users,
   Zap,
+  Loader2,
+  Phone,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import {
   Card,
@@ -51,6 +63,15 @@ const PLAN_CHECKOUT_IDS: Record<"pro" | "scale", string | undefined> = {
 // feature list, and an Upgrade CTA → /pricing.
 // ─────────────────────────────────────────────────────────────────────────────
 
+function MpesaLogo() {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-[#44B649] text-white font-sans font-bold text-xs select-none shadow-sm">
+      <span className="text-white font-black uppercase">m-</span>
+      <span className="text-[#E31E24] font-black uppercase">pesa</span>
+    </span>
+  );
+}
+
 export default function BillingPage() {
   const { isAuthenticated } = useConvexAuth();
   const { has, isLoaded: clerkLoaded, orgRole } = useAuth();
@@ -60,6 +81,82 @@ export default function BillingPage() {
   // admins (skip otherwise) and show an admins-only notice for support members.
   // Convex still enforces server-side; this just avoids the error boundary.
   const isAdmin = orgRole === "org:admin";
+
+  const initiateMpesa = useAction(api.mpesa.initiateMpesaStkPush);
+  const [isMpesaModalOpen, setIsMpesaModalOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<"pro" | "scale" | null>(null);
+  
+  // M-Pesa checkout state
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [isInitiating, setIsInitiating] = useState(false);
+  const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  const [pollingStatus, setPollingStatus] = useState<"idle" | "sent" | "completed" | "failed">("idle");
+  const [txError, setTxError] = useState<string | null>(null);
+
+  const pendingTx = useQuery(
+    api.mpesa.getActiveMpesaPendingTransaction,
+    checkoutRequestId ? { checkoutRequestID: checkoutRequestId } : "skip"
+  );
+
+  useEffect(() => {
+    if (pendingTx) {
+      if (pendingTx.status === "completed") {
+        setPollingStatus("completed");
+        const timer = setTimeout(() => {
+          setIsMpesaModalOpen(false);
+        }, 3000);
+        return () => clearTimeout(timer);
+      } else if (pendingTx.status === "failed") {
+        setPollingStatus("failed");
+        setTxError(pendingTx.error ?? "Payment failed or was cancelled.");
+      }
+    }
+  }, [pendingTx]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const planParam = params.get("plan");
+      if (planParam === "pro" || planParam === "scale") {
+        handleUpgradeClick(planParam);
+        // Clear parameter from URL so it doesn't reopen if refreshed
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
+    }
+  }, []);
+
+  const handleUpgradeClick = (planSlug: "pro" | "scale") => {
+    setSelectedPlan(planSlug);
+    setIsMpesaModalOpen(true);
+    setPhoneNumber("");
+    setCheckoutRequestId(null);
+    setPollingStatus("idle");
+    setTxError(null);
+  };
+
+  const handleMpesaPay = async () => {
+    if (!phoneNumber.trim() || !selectedPlan) return;
+    setIsInitiating(true);
+    setTxError(null);
+    try {
+      const res = await initiateMpesa({
+        phoneNumber,
+        planSlug: selectedPlan,
+      });
+      if (res.success && res.checkoutRequestID) {
+        setCheckoutRequestId(res.checkoutRequestID);
+        setPollingStatus("sent");
+      } else {
+        throw new Error("Failed to initiate STK push");
+      }
+    } catch (err: any) {
+      setTxError(err instanceof Error ? err.message : "Error initiating STK push");
+      setPollingStatus("failed");
+    } finally {
+      setIsInitiating(false);
+    }
+  };
 
   const overview = useQuery(
     api.billingDashboard.getBillingOverview,
@@ -121,34 +218,32 @@ export default function BillingPage() {
         ? { label: "Upgrade to Scale", planId: PLAN_CHECKOUT_IDS.scale }
         : null;
 
-  const upgradeButton =
-    upgrade && upgrade.planId ? (
-      // Clerk's in-app checkout drawer for an organization payer. Opens
-      // directly from the dashboard — no detour to /pricing. After a
-      // successful subscription Clerk redirects back here.
-      <CheckoutButton
-        planId={upgrade.planId}
-        planPeriod="month"
-        for="organization"
-        newSubscriptionRedirectUrl="/dashboard/billing"
-      >
-        <Button className="from-brand to-brand-2 bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95">
-          {upgrade.label}
-          <ArrowUpRight className="size-4" />
-        </Button>
-      </CheckoutButton>
-    ) : (
-      // Top tier (Scale) or plan ids not configured → see all plans.
-      <Button
-        asChild
-        className="from-brand to-brand-2 bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
-      >
-        <Link href="/pricing">
-          {isFree ? "Upgrade" : "Change plan"}
-          <ArrowUpRight className="size-4" />
-        </Link>
-      </Button>
-    );
+  const upgradePlanSlug =
+    livePlanSlug === "free_org"
+      ? "pro"
+      : livePlanSlug === "pro"
+        ? "scale"
+        : null;
+
+  const upgradeButton = upgradePlanSlug ? (
+    <Button
+      onClick={() => handleUpgradeClick(upgradePlanSlug)}
+      className="from-brand to-brand-2 bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 cursor-pointer font-bold"
+    >
+      Upgrade to {planName(upgradePlanSlug)}
+      <ArrowUpRight className="size-4" />
+    </Button>
+  ) : (
+    <Button
+      asChild
+      className="from-brand to-brand-2 bg-gradient-to-br text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95"
+    >
+      <Link href="/pricing">
+        Change Plan
+        <ArrowUpRight className="size-4" />
+      </Link>
+    </Button>
+  );
 
   const featureKeys = Object.keys(FEATURE_LABELS) as Feature[];
   const liveFeatures = planFeatures(livePlanSlug);
@@ -349,6 +444,142 @@ export default function BillingPage() {
           </div>
         </div>
       )}
+
+      {/* M-Pesa & Card Checkout Payment Modal */}
+      <Dialog open={isMpesaModalOpen} onOpenChange={setIsMpesaModalOpen}>
+        <DialogContent className="sm:max-w-md border-border bg-card shadow-lg p-6 text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Zap className="size-5 text-brand" />
+              Subscribe to {selectedPlan ? planName(selectedPlan) : "Plan"}
+            </DialogTitle>
+            <DialogDescription>
+              Choose your preferred payment method below to complete the subscription purchase.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4 text-sm">
+            {/* Option 1: M-Pesa STK Push */}
+            <div className="border border-border/85 rounded-xl p-4 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-foreground text-sm">Option A: Pay with M-Pesa</span>
+                  <MpesaLogo />
+                </div>
+                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px] font-bold">
+                  Active
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 leading-normal">
+                Enter your Safaricom phone number to receive an STK Push prompt on your device.
+              </p>
+
+              {pollingStatus === "idle" && (
+                <div className="space-y-3 mt-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mpesa-phone" className="text-xs font-bold text-muted-foreground uppercase">
+                      M-Pesa Mobile Number
+                    </Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                      <Input
+                        id="mpesa-phone"
+                        placeholder="e.g. 0712345678 or 2547XXXXXXXX"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="pl-9 h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleMpesaPay}
+                    disabled={isInitiating || !phoneNumber.trim()}
+                    className="w-full h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 cursor-pointer"
+                  >
+                    {isInitiating ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        Initiating...
+                      </>
+                    ) : (
+                      <>Send STK Push (KES {selectedPlan === "pro" ? "6,500" : "26,000"})</>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {pollingStatus === "sent" && (
+                <div className="mt-4 p-3 rounded bg-blue-500/5 border border-blue-500/20 text-center space-y-2">
+                  <Loader2 className="size-6 animate-spin text-brand mx-auto" />
+                  <p className="text-xs font-bold text-foreground">STK Push Request Dispatched</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Please check phone <strong>{phoneNumber}</strong> and enter your M-Pesa PIN to complete the payment.
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/60 italic animate-pulse">
+                    Waiting for Safaricom confirmation... (no need to refresh)
+                  </p>
+                </div>
+              )}
+
+              {pollingStatus === "completed" && (
+                <div className="mt-4 p-3 rounded bg-emerald-500/5 border border-emerald-500/20 text-center space-y-1.5">
+                  <Check className="size-6 text-emerald-500 mx-auto bg-emerald-500/10 rounded-full p-1" />
+                  <p className="text-xs font-bold text-emerald-600">Payment Confirmed!</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Receipt: {pendingTx?.mpesaReceiptNumber ?? "N/A"}. Your plan has been upgraded successfully.
+                  </p>
+                </div>
+              )}
+
+              {pollingStatus === "failed" && (
+                <div className="mt-4 p-3 rounded bg-rose-500/5 border border-rose-500/20 text-center space-y-2">
+                  <ShieldAlert className="size-5 text-rose-500 mx-auto" />
+                  <p className="text-xs font-bold text-rose-600">STK Push Payment Failed</p>
+                  <p className="text-[11px] text-muted-foreground leading-normal">{txError}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs font-semibold mt-1"
+                    onClick={() => {
+                      setPollingStatus("idle");
+                      setTxError(null);
+                      setCheckoutRequestId(null);
+                    }}
+                  >
+                    Try again
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Option 2: Credit Card (Disabled, Coming Soon) */}
+            <div className="border border-border/80 bg-muted/10 rounded-xl p-4 opacity-60 pointer-events-none relative">
+              <div className="absolute top-2 right-2">
+                <Badge variant="outline" className="text-[10px] uppercase font-bold text-amber-600 bg-amber-500/10 border-amber-500/20">
+                  Coming Soon
+                </Badge>
+              </div>
+              <span className="font-bold text-foreground text-sm">Option B: Pay with Credit Card</span>
+              <p className="text-xs text-muted-foreground mt-1 mb-3 leading-normal">
+                Global credit and debit card processing.
+              </p>
+              {upgrade && upgrade.planId && (
+                <CheckoutButton
+                  planId={upgrade.planId}
+                  planPeriod="month"
+                  for="organization"
+                  newSubscriptionRedirectUrl="/dashboard/billing"
+                >
+                  <Button disabled size="sm" className="w-full text-xs font-semibold">
+                    Pay with Card
+                  </Button>
+                </CheckoutButton>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

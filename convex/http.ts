@@ -257,6 +257,70 @@ http.route({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// M-PESA STK PUSH CALLBACK
+//
+//   POST  https://<convex-deployment>.convex.site/mpesa-callback
+//
+// Safaricom Daraja API sends the transaction result here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const mpesaWebhook = httpAction(async (ctx, request) => {
+  try {
+    const body = await request.json();
+    console.log("[mpesa-webhook] Received payload:", JSON.stringify(body));
+
+    const stkCallback = body?.Body?.stkCallback;
+    if (!stkCallback) {
+      return new Response("Invalid payload structure", { status: 400 });
+    }
+
+    const checkoutRequestID = stkCallback.CheckoutRequestID;
+    const resultCode = stkCallback.ResultCode;
+    const resultDesc = stkCallback.ResultDesc;
+
+    if (!checkoutRequestID) {
+      return new Response("Missing CheckoutRequestID", { status: 400 });
+    }
+
+    let status: "completed" | "failed" = "failed";
+    let mpesaReceiptNumber: string | undefined = undefined;
+    let error: string | undefined = undefined;
+
+    if (resultCode === 0) {
+      status = "completed";
+      const metadataItems = stkCallback.CallbackMetadata?.Item || [];
+      const receiptItem = metadataItems.find((item: any) => item.Name === "MpesaReceiptNumber");
+      mpesaReceiptNumber = receiptItem?.Value ? String(receiptItem.Value) : undefined;
+    } else {
+      status = "failed";
+      error = resultDesc || `Transaction failed with code ${resultCode}`;
+    }
+
+    // Call Convex mutation to update transaction status and provision subscription
+    await ctx.runMutation(api.mpesa.updateMpesaTransactionStatus, {
+      checkoutRequestID,
+      status,
+      mpesaReceiptNumber,
+      error,
+    });
+
+    return new Response(JSON.stringify({ ResponseCode: "0", ResponseDescription: "success" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("[mpesa-webhook] Error processing webhook:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+});
+
+http.route({
+  path: "/mpesa-callback",
+  method: "POST",
+  handler: mpesaWebhook,
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC widget launcher config (Phase 6, additive).
 //
 //   GET  https://<convex-deployment>.convex.site/widget-config?app_id=<workspaceId>

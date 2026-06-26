@@ -291,4 +291,28 @@ export default defineSchema({
     aiMessages: v.number(),
     kbDocuments: v.number(),
   }).index("by_workspace_period", ["workspaceId", "periodStart"]),
+
+  globalSettings: defineTable({
+    guardrailsEnabled: v.boolean(),
+    blockedKeywords: v.array(v.string()),
+    piiRedactionEnabled: v.boolean(),
+    systemSafetyPrompt: v.string(),
+  }),
+
+  mpesaTransactions: defineTable({
+    workspaceId: v.id("workspaces"),
+    clerkOrgId: v.string(),
+    phoneNumber: v.string(),
+    amount: v.number(),
+    checkoutRequestID: v.string(),
+    merchantRequestID: v.string(),
+    status: v.union(v.literal("pending"), v.literal("completed"), v.literal("failed")),
+    mpesaReceiptNumber: v.optional(v.string()),
+    planSlug: v.string(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_checkout_id", ["checkoutRequestID"])
+    .index("by_workspace", ["workspaceId", "createdAt"]),
 });

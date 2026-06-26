@@ -60,12 +60,12 @@ const META: Record<PlanSlug, { priceMonthly: number; tagline: string; highlighte
     tagline: "Everything you need to launch an AI chat widget.",
   },
   pro: {
-    priceMonthly: 49,
+    priceMonthly: 6500,
     tagline: "For growing teams that need crawling and proactive messaging.",
     highlighted: true,
   },
   scale: {
-    priceMonthly: 199,
+    priceMonthly: 26000,
     tagline: "High-volume support with the largest quotas.",
   },
 };

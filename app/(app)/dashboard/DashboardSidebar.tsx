@@ -12,6 +12,7 @@ import {
   UsersRound,
   CreditCard,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,6 +69,11 @@ export function DashboardSidebar() {
     api.workspaces.getActiveWorkspace,
     isAuthenticated ? {} : "skip",
   );
+  const adminCheck = useQuery(
+    api.admin.isAdminCheck,
+    isAuthenticated ? {} : "skip",
+  );
+  const isAdmin = adminCheck?.isAdmin === true;
   const workspaceReady = active?.ok === true;
 
   // Live sidebar badges. `queueCounts` is reactive + workspace-scoped. We surface
@@ -178,6 +184,30 @@ export function DashboardSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wide text-sidebar-foreground/60">
+              Operations
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    tooltip="Admin Dashboard"
+                    className="h-9 gap-2.5 rounded-lg font-medium text-sidebar-foreground/80 transition-colors hover:bg-destructive/10 hover:text-destructive hover:[&>svg]:text-destructive"
+                  >
+                    <Link href="/admin">
+                      <ShieldCheck className="size-4" />
+                      <span>Admin Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-2">

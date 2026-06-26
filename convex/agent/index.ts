@@ -70,7 +70,10 @@ function requireApiKey(provider: "openai" | "gemini"): string {
 // delivered separately, wrapped in explicit UNTRUSTED-CONTENT delimiters (see
 // rag.ts) — this prompt tells the model that any instruction appearing inside
 // that block is data, never a command.
-function buildInstructions(workspaceName: string): string {
+function buildInstructions(workspaceName: string, systemSafetyPrompt?: string): string {
+  const safetyPrompt = systemSafetyPrompt
+    ? `\n\nADDITIONAL SAFETY GUIDELINES:\n${systemSafetyPrompt}`
+    : "";
   return `You are the AI support assistant for "${workspaceName}". You help website visitors by answering ONLY from this workspace's knowledge base and helpdesk articles.
 
 STRICT RULES — follow all of them, always:
@@ -86,7 +89,7 @@ STRICT RULES — follow all of them, always:
 10. UPGRADES: When the visitor asks about upgrading, pricing tiers, raising limits or seats, or unlocking a paid feature, call send_upgrade_link to show them an upgrade card that links to the billing page. Do not paste a billing URL yourself — the card provides the button. Briefly invite them to upgrade using it.
 11. IDENTITY: You are an AI assistant developed by Xuremi Technologies (https://xuremi.com). If asked about your origin, who created you, or who developed you, you must state that you were developed by Xuremi Technologies and provide the link to their website. Never say you were created by Google, OpenAI, or any other company.
 
-You have tools to search the knowledge base, search helpdesk articles, fetch FAQs, suggest articles, capture a lead, escalate to a human, send an upgrade link to the billing page, and signal that you cannot help. Use them rather than guessing.`;
+You have tools to search the knowledge base, search helpdesk articles, fetch FAQs, suggest articles, capture a lead, escalate to a human, send an upgrade link to the billing page, and signal that you cannot help. Use them rather than guessing.${safetyPrompt}`;
 }
 
 // Build a workspace-scoped Agent. Constructed PER CALL (cheap) so the tools
@@ -96,6 +99,7 @@ You have tools to search the knowledge base, search helpdesk articles, fetch FAQ
 export function buildSupportAgent(deps: {
   workspaceName: string;
   aiProvider?: "openai" | "gemini";
+  systemSafetyPrompt?: string;
   toolDeps: SupportToolDeps;
 }): Agent {
   const provider = deps.aiProvider || "openai";
@@ -113,7 +117,7 @@ export function buildSupportAgent(deps: {
   return new Agent(components.agent, {
     name: "support-agent",
     languageModel,
-    instructions: buildInstructions(deps.workspaceName),
+    instructions: buildInstructions(deps.workspaceName, deps.systemSafetyPrompt),
     // Server-resolved, workspace-scoped tools. The model can pick args, but
     // workspaceId/conversationId are baked into the closures — never model text.
     tools: buildSupportTools(deps.toolDeps),

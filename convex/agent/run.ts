@@ -91,6 +91,44 @@ export const respondToVisitorMessage = internalAction({
     };
 
     try {
+      // ── Load safety configurations ──
+      const settings = await ctx.runQuery(internal.admin.getGlobalSettingsInternal);
+
+      const visitorText = convo.lastVisitorBody ?? "";
+
+      // ── Toxicity / Guardrails: Blocked keywords filter ──
+      if (settings.guardrailsEnabled) {
+        const matched = settings.blockedKeywords.filter((kw: string) =>
+          visitorText.toLowerCase().includes(kw.toLowerCase())
+        );
+        if (matched.length > 0) {
+          // Escalate to human and stop early
+          await ctx.runMutation(internal.agent.runHelpers.postSystem, {
+            conversationId,
+            expectedEpoch: runEpoch,
+            body: `Security Warning: Guardrail triggered. Conversation handed over to support team.`,
+          });
+          await ctx.runMutation(internal.agent.internal.escalateToHuman, {
+            conversationId,
+            workspaceId: workspace._id,
+            expectedEpoch: runEpoch,
+            reason: "guardrail_violation",
+          });
+          await refund();
+          return null;
+        }
+      }
+
+      // ── PII Redaction ──
+      let promptText = visitorText;
+      if (settings.piiRedactionEnabled) {
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const creditCardRegex = /\b(?:\d[ -]*?){13,16}\b/g;
+        promptText = visitorText
+          .replace(emailRegex, "[REDACTED_EMAIL]")
+          .replace(creditCardRegex, "[REDACTED_CARD]");
+      }
+
       // ── 4. Ensure an agent thread exists (the bridge) ──────────────────────
       // Build a minimal agent (no key needed for createThread? — createThread
       // does NOT call the model, but buildSupportAgent reads the key. We read it
@@ -102,6 +140,7 @@ export const respondToVisitorMessage = internalAction({
       const agent = buildSupportAgent({
         workspaceName: workspace.name,
         aiProvider: workspace.aiProvider as "openai" | "gemini" | undefined,
+        systemSafetyPrompt: settings.systemSafetyPrompt,
         toolDeps: {
           workspaceId: workspace._id,
           conversationId,
@@ -134,7 +173,6 @@ export const respondToVisitorMessage = internalAction({
       }
 
       // ── 5. Retrieve RAG context (workspaceId-only vector filter) ───────────
-      const visitorText = convo.lastVisitorBody ?? "";
       const retrieval = await retrieveContext(ctx, workspace._id, visitorText);
       // Seed citations from the pre-fetch (tools may add more).
       collected.push(...retrieval.citations);
@@ -167,7 +205,7 @@ export const respondToVisitorMessage = internalAction({
         { threadId },
         {
           system: retrieval.contextBlock,
-          prompt: visitorText,
+          prompt: promptText,
           tools: agent.options.tools,
           stopWhen: stepCountIs(MAX_STEPS),
         },
