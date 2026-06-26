@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useConvex } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Check, X, ArrowLeft, ArrowRight, Sparkles, Loader2, Phone, Zap, ShieldAlert } from "lucide-react";
@@ -636,8 +636,8 @@ function PlanCta({
   trialDays?: number;
 }) {
   const router = useRouter();
+  const convex = useConvex();
   const initiateMpesa = useAction(api.mpesa.initiateMpesaStkPush);
-  const validateCoupon = useQuery(api.coupons.validate, { code: "" }); // Will handle manually if possible or just use action
 
   
   const [isMpesaModalOpen, setIsMpesaModalOpen] = useState(false);
@@ -645,10 +645,31 @@ function PlanCta({
   const [couponCode, setCouponCode] = useState("");
   const [couponError, setCouponError] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isInitiating, setIsInitiating] = useState(false);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [pollingStatus, setPollingStatus] = useState<"idle" | "sent" | "completed" | "failed">("idle");
   const [txError, setTxError] = useState<string | null>(null);
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setIsApplyingCoupon(true);
+    setCouponError("");
+    try {
+      const res = await convex.query(api.coupons.validate, { code: couponCode.trim() });
+      if (res.valid) {
+        setDiscountPercent(res.discountPercent ?? 0);
+      } else {
+        setDiscountPercent(0);
+        setCouponError(res.reason ?? "Invalid code");
+      }
+    } catch (e: any) {
+      setDiscountPercent(0);
+      setCouponError(e.message || "Failed to validate coupon");
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
 
   const pendingTx = useQuery(
     api.mpesa.getActiveMpesaPendingTransaction,
@@ -811,7 +832,7 @@ function PlanCta({
                     </div>
                   </div>
 
-                  {/* Coupon Code - In a real app we'd validate this with a convex query */}
+                  {/* Coupon Code */}
                   <div className="space-y-1.5 pt-1 border-t border-border mt-3">
                     <Label htmlFor="mpesa-coupon" className="text-xs font-bold text-muted-foreground uppercase">
                       Promo Code (Optional)
@@ -828,6 +849,15 @@ function PlanCta({
                         }}
                         className="h-9 text-xs"
                       />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 text-xs"
+                        disabled={!couponCode.trim() || isApplyingCoupon || discountPercent > 0}
+                        onClick={handleApplyCoupon}
+                      >
+                        {isApplyingCoupon ? <Loader2 className="size-3 animate-spin" /> : "Apply"}
+                      </Button>
                     </div>
                     {couponError && <p className="text-[10px] text-rose-500 font-medium">{couponError}</p>}
                     {discountPercent > 0 && <p className="text-[10px] text-emerald-500 font-medium">{discountPercent}% discount applied!</p>}
@@ -844,7 +874,7 @@ function PlanCta({
                         Initiating...
                       </>
                     ) : (
-                      <>Send STK Push (KES {(price ?? 0).toLocaleString()})</>
+                      <>Send STK Push (KES {discountPercent > 0 ? Math.floor((price ?? 0) * (1 - discountPercent / 100)).toLocaleString() : (price ?? 0).toLocaleString()})</>
                     )}
                   </Button>
                 </div>

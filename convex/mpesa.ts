@@ -14,14 +14,15 @@ export const initiateMpesaStkPush = action({
   },
   handler: async (ctx, args) => {
     // 1. Authenticate caller (must be workspace admin)
-    const { workspace, identity } = await ctx.runQuery(
+    const authData = await ctx.runQuery(
       api.mpesa.requireAdminForMpesa,
       {}
     );
 
-    const clerkOrgId = workspace.clerkOrgId;
+    const clerkOrgId = authData.orgId;
+    const workspaceId = authData.workspaceId;
     if (!clerkOrgId) {
-      throw new ConvexError("Workspace must be linked to a Clerk organization to manage billing.");
+      throw new ConvexError("Must be linked to a Clerk organization to manage billing.");
     }
 
     // Clean phone number (e.g. 0712345678 -> 254712345678)
@@ -149,7 +150,7 @@ export const initiateMpesaStkPush = action({
 
     // 4. Save Pending Transaction
     await ctx.runMutation(internal.mpesa.savePendingMpesaTransaction, {
-      workspaceId: workspace._id,
+      workspaceId,
       clerkOrgId,
       phoneNumber: cleanedPhone,
       amount,
@@ -167,22 +168,55 @@ export const initiateMpesaStkPush = action({
   },
 });
 
-// requireAdminForMpesa wraps requireOrgMember for usage inside action
+// requireAdminForMpesa parses JWT directly to allow payments before onboarding
 export const requireAdminForMpesa = query({
   args: {},
   handler: async (ctx) => {
-    const orgInfo = await requireOrgMember(ctx);
-    if (orgInfo.role !== "admin") {
+    const rawIdentity = await ctx.auth.getUserIdentity();
+    if (!rawIdentity) {
+      throw new ConvexError("Not authenticated.");
+    }
+
+    const orgObj = (rawIdentity as any).o;
+    const orgId = typeof (rawIdentity as any).org_id === "string" ? (rawIdentity as any).org_id : orgObj?.id || null;
+    const orgRole = typeof (rawIdentity as any).org_role === "string" ? (rawIdentity as any).org_role : orgObj?.rol || null;
+
+    if (!orgId) {
+      throw new ConvexError("No active organization on the session. Select or create one.");
+    }
+    
+    // Allow either JWT admin role, or if there's a workspace, check workspaceMembers
+    let isAdmin = orgRole === "org:admin";
+    
+    // Check if they are admin in DB (to handle role demotions faster than JWT expiry)
+    const member = await ctx.db
+      .query("workspaceMembers")
+      .withIndex("by_org_user", (q) =>
+        q.eq("clerkOrgId", orgId).eq("clerkUserId", rawIdentity.subject)
+      )
+      .unique();
+      
+    if (member && member.status === "active") {
+      isAdmin = member.role === "admin";
+    }
+
+    if (!isAdmin) {
       throw new ConvexError("Only organization administrators can initiate subscription purchases.");
     }
-    return orgInfo;
+
+    const workspace = await ctx.db
+      .query("workspaces")
+      .withIndex("by_org", (q) => q.eq("clerkOrgId", orgId))
+      .unique();
+
+    return { orgId, workspaceId: workspace?._id };
   },
 });
 
 // Save new STK push transaction in pending state
 export const savePendingMpesaTransaction = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    workspaceId: v.optional(v.id("workspaces")),
     clerkOrgId: v.string(),
     phoneNumber: v.string(),
     amount: v.number(),

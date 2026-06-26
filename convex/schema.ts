@@ -350,7 +350,7 @@ export default defineSchema({
   }),
 
   mpesaTransactions: defineTable({
-    workspaceId: v.id("workspaces"),
+    workspaceId: v.optional(v.id("workspaces")),
     clerkOrgId: v.string(),
     phoneNumber: v.string(),
     amount: v.number(),
