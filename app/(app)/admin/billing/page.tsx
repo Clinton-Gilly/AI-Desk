@@ -1141,7 +1141,7 @@ export default function AdminBillingPage() {
                       <TableCell className="font-medium">
                         <div className="flex flex-col">
                           <span className="text-foreground font-semibold">
-                            {workspaceMap.get(tx.workspaceId) || "Unknown Workspace"}
+                            {tx.workspaceId ? workspaceMap.get(tx.workspaceId) || "Unknown Workspace" : "No Workspace"}
                           </span>
                           <span className="text-[10px] text-muted-foreground font-mono">
                             {tx.clerkOrgId}
