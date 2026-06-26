@@ -1,3 +1,5 @@
+import type { QueryCtx, MutationCtx } from "../_generated/server";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan / feature / limit definitions (Free / Pro / Scale).
 //
@@ -110,22 +112,53 @@ export function isPlanSlug(value: string): value is PlanSlug {
 
 // Resolve a plan definition from an arbitrary slug string (webhook-supplied),
 // defaulting to Free for unknown/absent slugs so enforcement always has limits.
-export function getPlan(slug: string | null | undefined): PlanDefinition {
-  if (slug && isPlanSlug(slug)) return PLANS[slug];
+export async function getPlan(
+  ctx: QueryCtx | MutationCtx,
+  slug: string | null | undefined,
+): Promise<PlanDefinition> {
+  const targetSlug = slug || DEFAULT_PLAN_SLUG;
+  
+  const dbPlan = await ctx.db
+    .query("billingPlans")
+    .withIndex("by_key", (q) => q.eq("key", targetSlug))
+    .unique();
+
+  if (dbPlan) {
+    return {
+      slug: dbPlan.key as PlanSlug, // cast for legacy type compatibility where needed
+      name: dbPlan.name,
+      features: dbPlan.features as Feature[],
+      limits: dbPlan.limits,
+    };
+  }
+
+  // Fallback to hardcoded plan definition if DB is empty or plan is missing
+  if (isPlanSlug(targetSlug)) return PLANS[targetSlug];
   return PLANS[DEFAULT_PLAN_SLUG];
 }
 
-export function planLimits(slug: string | null | undefined): PlanLimits {
-  return getPlan(slug).limits;
+export async function planLimits(
+  ctx: QueryCtx | MutationCtx,
+  slug: string | null | undefined,
+): Promise<PlanLimits> {
+  const plan = await getPlan(ctx, slug);
+  return plan.limits;
 }
 
-export function planFeatures(slug: string | null | undefined): Feature[] {
-  return getPlan(slug).features;
+export async function planFeatures(
+  ctx: QueryCtx | MutationCtx,
+  slug: string | null | undefined,
+): Promise<Feature[]> {
+  const plan = await getPlan(ctx, slug);
+  return plan.features;
 }
 
-export function planHasFeature(
+export async function planHasFeature(
+  ctx: QueryCtx | MutationCtx,
   slug: string | null | undefined,
   feature: Feature,
-): boolean {
-  return getPlan(slug).features.includes(feature);
+): Promise<boolean> {
+  const plan = await getPlan(ctx, slug);
+  return plan.features.includes(feature);
 }
+

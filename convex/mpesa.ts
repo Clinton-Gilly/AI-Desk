@@ -8,7 +8,7 @@ import { api, internal } from "./_generated/api";
 export const initiateMpesaStkPush = action({
   args: {
     phoneNumber: v.string(),
-    planSlug: v.union(v.literal("pro"), v.literal("scale")),
+    planSlug: v.string(),
   },
   handler: async (ctx, args) => {
     // 1. Authenticate caller (must be workspace admin)
@@ -36,8 +36,12 @@ export const initiateMpesaStkPush = action({
       throw new ConvexError("Please provide a valid Safaricom M-Pesa phone number in the format 07XXXXXXXX or 254XXXXXXXX.");
     }
 
-    // Determine amount in KES (Pro is 6500 KES, Scale is 26000 KES)
-    const amount = args.planSlug === "pro" ? 6500 : 26000;
+    // Determine amount in KES by querying the database for the dynamic plan
+    const plan: any = await ctx.runQuery(api.plans.get, { key: args.planSlug });
+    if (!plan || plan.priceMonthly <= 0) {
+      throw new ConvexError("Invalid plan or plan is free.");
+    }
+    const amount = plan.priceMonthly;
 
     const consumerKey = process.env.MPESA_CONSUMER_KEY;
     const consumerSecret = process.env.MPESA_CONSUMER_SECRET;

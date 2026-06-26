@@ -250,6 +250,22 @@ export default defineSchema({
     faqEnabled: v.boolean(),
   }).index("by_workspace", ["workspaceId"]),
 
+  // ── BILLING PLANS (dynamic plans) ───────────────────────────────────────────
+  billingPlans: defineTable({
+    key: v.string(), // e.g., "free_org", "pro", "scale"
+    name: v.string(),
+    priceMonthly: v.number(), // Price in KES
+    tagline: v.string(),
+    highlighted: v.boolean(), // For the popular tier badge
+    features: v.array(v.string()), // e.g., ["ai_messages", "website_crawl", ...]
+    limits: v.object({
+      aiMessagesPerMonth: v.number(),
+      kbDocuments: v.number(),
+      crawlPages: v.number(),
+      seats: v.number(),
+    }),
+  }).index("by_key", ["key"]),
+
   // ── BILLING MIRROR (webhook-written; read-only cache for Convex gating) ─────
   subscriptions: defineTable({
     workspaceId: v.id("workspaces"),

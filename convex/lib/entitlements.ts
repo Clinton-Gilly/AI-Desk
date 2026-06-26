@@ -65,7 +65,7 @@ export async function getEntitlement(
         })[0];
 
   if (!sub) {
-    const plan = getPlan(DEFAULT_PLAN_SLUG);
+    const plan = await getPlan(ctx, DEFAULT_PLAN_SLUG);
     return {
       planSlug: plan.slug,
       status: "none",
@@ -79,13 +79,13 @@ export async function getEntitlement(
 
   // Prefer the snapshotted limits/features on the row; fall back to plan-by-slug
   // if a webhook wrote a partial row. Only keep feature strings we recognize.
-  const limits: PlanLimits = sub.limits ?? planLimits(sub.planSlug);
-  const known = new Set<string>(planFeatures(sub.planSlug));
+  const limits: PlanLimits = sub.limits ?? await planLimits(ctx, sub.planSlug);
+  const known = new Set<string>(await planFeatures(ctx, sub.planSlug));
   const snapshotted = (sub.features ?? []).filter((f): f is Feature =>
     known.has(f),
   );
   const features: Feature[] =
-    snapshotted.length > 0 ? snapshotted : planFeatures(sub.planSlug);
+    snapshotted.length > 0 ? snapshotted : await planFeatures(ctx, sub.planSlug);
 
   return {
     planSlug: sub.planSlug,

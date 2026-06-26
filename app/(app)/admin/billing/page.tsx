@@ -1,20 +1,30 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
+import { useState } from "react";
 import {
   CreditCard,
-  TrendingUp,
-  Building,
-  DollarSign,
-  AlertCircle,
-  Clock,
-  Sparkles,
-  ArrowRight,
   Phone,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Check,
+  Star,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  PackagePlus,
+  Layers,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -23,26 +33,483 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { motion } from "motion/react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { motion, AnimatePresence } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+type BillingPlan = {
+  _id: Id<"billingPlans">;
+  _creationTime: number;
+  key: string;
+  name: string;
+  priceMonthly: number;
+  tagline: string;
+  highlighted: boolean;
+  features: string[];
+  limits: {
+    aiMessagesPerMonth: number;
+    kbDocuments: number;
+    crawlPages: number;
+    seats: number;
+  };
+};
+
+const AVAILABLE_FEATURES = [
+  { key: "ai_messages", label: "AI Messages" },
+  { key: "website_crawl", label: "Website Crawl" },
+  { key: "kb_documents", label: "KB Documents" },
+  { key: "helpdesk", label: "Helpdesk" },
+  { key: "proactive_messages", label: "Proactive Messages" },
+  { key: "remove_branding", label: "Remove Branding" },
+];
+
+const DEFAULT_FORM = {
+  key: "",
+  name: "",
+  priceMonthly: 0,
+  tagline: "",
+  highlighted: false,
+  features: [] as string[],
+  limits: {
+    aiMessagesPerMonth: 100,
+    kbDocuments: 10,
+    crawlPages: 0,
+    seats: 2,
+  },
+};
+
+// ─── Plan Form Dialog ─────────────────────────────────────────────────────────
+function PlanFormDialog({
+  open,
+  onClose,
+  editingPlan,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editingPlan: BillingPlan | null;
+}) {
+  const create = useMutation(api.plans.create);
+  const update = useMutation(api.plans.update);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(() =>
+    editingPlan
+      ? {
+          key: editingPlan.key,
+          name: editingPlan.name,
+          priceMonthly: editingPlan.priceMonthly,
+          tagline: editingPlan.tagline,
+          highlighted: editingPlan.highlighted,
+          features: [...editingPlan.features],
+          limits: { ...editingPlan.limits },
+        }
+      : { ...DEFAULT_FORM, features: [], limits: { ...DEFAULT_FORM.limits } }
+  );
+
+  // Keep form in sync when editingPlan changes
+  const [featureInput, setFeatureInput] = useState("");
+
+  const toggleFeature = (featureKey: string) => {
+    setForm((f) => ({
+      ...f,
+      features: f.features.includes(featureKey)
+        ? f.features.filter((k) => k !== featureKey)
+        : [...f.features, featureKey],
+    }));
+  };
+
+  const addCustomFeature = () => {
+    const trimmed = featureInput.trim();
+    if (!trimmed || form.features.includes(trimmed)) return;
+    setForm((f) => ({ ...f, features: [...f.features, trimmed] }));
+    setFeatureInput("");
+  };
+
+  const removeFeature = (feat: string) => {
+    setForm((f) => ({ ...f, features: f.features.filter((k) => k !== feat) }));
+  };
+
+  const handleSave = async () => {
+    if (!form.key.trim() || !form.name.trim()) {
+      toast.error("Plan key and name are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editingPlan) {
+        await update({ id: editingPlan._id, ...form });
+        toast.success("Plan updated successfully.");
+      } else {
+        await create(form);
+        toast.success("Plan created successfully.");
+      }
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save plan.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{editingPlan ? "Edit Plan" : "Create New Plan"}</DialogTitle>
+          <DialogDescription>
+            {editingPlan
+              ? "Update this subscription plan's details, pricing, and features."
+              : "Add a new subscription plan. Up to 10 plans are supported."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          {/* Basic Info */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-key">Plan Key (slug)</Label>
+              <Input
+                id="plan-key"
+                value={form.key}
+                onChange={(e) => setForm((f) => ({ ...f, key: e.target.value.toLowerCase().replace(/\s+/g, "_") }))}
+                placeholder="e.g. pro, scale, enterprise"
+                disabled={!!editingPlan}
+              />
+              {editingPlan && (
+                <p className="text-xs text-muted-foreground">Key cannot be changed after creation.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-name">Display Name</Label>
+              <Input
+                id="plan-name"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Pro, Scale, Enterprise"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="plan-tagline">Tagline</Label>
+            <Input
+              id="plan-tagline"
+              value={form.tagline}
+              onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
+              placeholder="Short description shown on the pricing page"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-price">Price / Month (KES)</Label>
+              <Input
+                id="plan-price"
+                type="number"
+                min={0}
+                value={form.priceMonthly}
+                onChange={(e) => setForm((f) => ({ ...f, priceMonthly: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="flex items-center gap-3 pt-6">
+              <Switch
+                id="plan-highlighted"
+                checked={form.highlighted}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, highlighted: v }))}
+              />
+              <Label htmlFor="plan-highlighted" className="cursor-pointer">
+                Mark as Popular / Highlighted
+              </Label>
+            </div>
+          </div>
+
+          {/* Limits */}
+          <div>
+            <h4 className="text-sm font-semibold mb-3 text-foreground">Usage Limits</h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {(
+                [
+                  { field: "aiMessagesPerMonth", label: "AI Messages/mo" },
+                  { field: "kbDocuments", label: "KB Documents" },
+                  { field: "crawlPages", label: "Crawl Pages" },
+                  { field: "seats", label: "Team Seats" },
+                ] as const
+              ).map(({ field, label }) => (
+                <div key={field} className="space-y-1.5">
+                  <Label className="text-xs">{label}</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.limits[field]}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        limits: { ...f.limits, [field]: Number(e.target.value) },
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Features */}
+          <div>
+            <h4 className="text-sm font-semibold mb-3 text-foreground">Features</h4>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {AVAILABLE_FEATURES.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleFeature(key)}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors text-left ${
+                    form.features.includes(key)
+                      ? "border-brand bg-brand/10 text-brand"
+                      : "border-border bg-card text-muted-foreground hover:border-brand/40"
+                  }`}
+                >
+                  <div
+                    className={`flex size-4 shrink-0 items-center justify-center rounded border ${
+                      form.features.includes(key) ? "border-brand bg-brand text-white" : "border-border"
+                    }`}
+                  >
+                    {form.features.includes(key) && <Check className="size-2.5" />}
+                  </div>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom feature input */}
+            <div className="mt-3 flex gap-2">
+              <Input
+                value={featureInput}
+                onChange={(e) => setFeatureInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomFeature())}
+                placeholder="Add custom feature tag…"
+                className="flex-1"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={addCustomFeature}>
+                Add
+              </Button>
+            </div>
+
+            {/* Custom features pills */}
+            {form.features.filter((f) => !AVAILABLE_FEATURES.some((af) => af.key === f)).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {form.features
+                  .filter((f) => !AVAILABLE_FEATURES.some((af) => af.key === f))
+                  .map((feat) => (
+                    <span
+                      key={feat}
+                      className="flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-xs text-brand"
+                    >
+                      {feat}
+                      <button
+                        type="button"
+                        onClick={() => removeFeature(feat)}
+                        className="hover:text-destructive"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+            {editingPlan ? "Save Changes" : "Create Plan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Plan Card ────────────────────────────────────────────────────────────────
+function PlanCard({
+  plan,
+  onEdit,
+  onDelete,
+}: {
+  plan: BillingPlan;
+  onEdit: (p: BillingPlan) => void;
+  onDelete: (p: BillingPlan) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const planColor =
+    plan.key === "free_org"
+      ? "text-muted-foreground"
+      : plan.key === "pro"
+      ? "text-brand"
+      : plan.highlighted
+      ? "text-purple-500"
+      : "text-foreground";
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      className="rounded-xl border border-border bg-card/60 backdrop-blur-sm shadow-sm overflow-hidden"
+    >
+      <div className="flex items-start justify-between gap-3 p-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`font-bold text-lg ${planColor}`}>{plan.name}</span>
+            {plan.highlighted && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                <Star className="size-2.5" />
+                Popular
+              </span>
+            )}
+            <code className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+              {plan.key}
+            </code>
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground truncate">{plan.tagline}</p>
+          <div className="mt-2 flex items-baseline gap-1">
+            <span className="text-2xl font-extrabold text-foreground">
+              KES {plan.priceMonthly.toLocaleString()}
+            </span>
+            <span className="text-xs text-muted-foreground">/mo</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={() => onEdit(plan)}
+            title="Edit plan"
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+          {plan.key !== "free_org" && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => onDelete(plan)}
+              title="Delete plan"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Limits summary */}
+      <div className="border-t border-border bg-muted/20 px-4 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+        <div>
+          <span className="text-muted-foreground">AI Messages</span>
+          <span className="block font-semibold text-foreground">
+            {plan.limits.aiMessagesPerMonth.toLocaleString()}/mo
+          </span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">KB Docs</span>
+          <span className="block font-semibold text-foreground">{plan.limits.kbDocuments}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Crawl Pages</span>
+          <span className="block font-semibold text-foreground">{plan.limits.crawlPages}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Seats</span>
+          <span className="block font-semibold text-foreground">{plan.limits.seats}</span>
+        </div>
+      </div>
+
+      {/* Features toggle */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between border-t border-border px-4 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+      >
+        <span>{plan.features.length} feature{plan.features.length !== 1 ? "s" : ""}</span>
+        {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-wrap gap-1.5 px-4 pb-3 pt-1">
+              {plan.features.map((feat) => {
+                const label = AVAILABLE_FEATURES.find((f) => f.key === feat)?.label ?? feat;
+                return (
+                  <span
+                    key={feat}
+                    className="rounded-full border border-brand/20 bg-brand/5 px-2.5 py-0.5 text-[11px] text-brand"
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminBillingPage() {
   const stats = useQuery(api.admin.getOverviewStats);
   const workspaces = useQuery(api.admin.listWorkspaces);
   const mpesaTransactions = useQuery(api.admin.listAllMpesaTransactions);
+  const plans = useQuery(api.plans.list);
+  const removePlan = useMutation(api.plans.remove);
 
-  const isLoading = stats === undefined || workspaces === undefined || mpesaTransactions === undefined;
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<BillingPlan | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState<BillingPlan | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const isLoading =
+    stats === undefined ||
+    workspaces === undefined ||
+    mpesaTransactions === undefined ||
+    plans === undefined;
 
   // Filter workspaces with paid plans
   const paidSubscribers = workspaces?.filter(
     (ws) => ws.planSlug !== "free_org" && ws.subscriptionStatus !== "none"
   );
-
-  const getPlanPrice = (plan: string) => {
-    if (plan === "pro") return 49;
-    if (plan === "scale") return 199;
-    return 0;
-  };
 
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
@@ -82,9 +549,23 @@ export default function AdminBillingPage() {
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!deletingPlan) return;
+    setDeleteLoading(true);
+    try {
+      await removePlan({ id: deletingPlan._id });
+      toast.success(`Plan "${deletingPlan.name}" deleted.`);
+      setDeletingPlan(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete plan.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="flex-1 space-y-6 p-6 md:p-8">
+      <div className="flex-1 space-y-6 p-4 md:p-8">
         <div className="space-y-1">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-72" />
@@ -96,35 +577,38 @@ export default function AdminBillingPage() {
         </div>
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
   // Calculate stats
   const totalPaidSubs = paidSubscribers?.length ?? 0;
-  const activeProCount = workspaces?.filter((w) => w.planSlug === "pro" && w.subscriptionStatus === "active").length ?? 0;
-  const activeScaleCount = workspaces?.filter((w) => w.planSlug === "scale" && w.subscriptionStatus === "active").length ?? 0;
+  const activeProCount =
+    workspaces?.filter((w) => w.planSlug === "pro" && w.subscriptionStatus === "active").length ?? 0;
+  const activeScaleCount =
+    workspaces?.filter((w) => w.planSlug === "scale" && w.subscriptionStatus === "active").length ?? 0;
 
   // Workspace map for name lookup
   const workspaceMap = new Map(workspaces?.map((w) => [w._id, w.name]) ?? []);
+  const planCount = plans?.length ?? 0;
 
   return (
-    <div className="flex-1 space-y-6 overflow-y-auto p-6 md:p-8 bg-muted/10 h-screen pb-16">
+    <div className="flex-1 space-y-6 overflow-y-auto p-4 md:p-8 bg-muted/10 min-h-screen pb-16">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-red-600 to-amber-500 bg-clip-text text-transparent">
-            Billing & Subscriptions
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-red-600 to-amber-500 bg-clip-text text-transparent">
+            Billing &amp; Subscriptions
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Monitor recurring subscription distribution, plan cohorts, and estimated monthly MRR.
+            Manage subscription plans, monitor recurring revenue, and audit M-Pesa transactions.
           </p>
         </div>
       </div>
 
       {/* Plan Cohorts Grid */}
       <div className="grid gap-4 sm:grid-cols-3">
-        {/* Free Plan */}
         <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
           <CardHeader className="pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -135,13 +619,10 @@ export default function AdminBillingPage() {
             <div className="text-3xl font-bold tracking-tight text-foreground">
               {stats.subscriptionStats.free_org}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Workspaces ($0 / mo)
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Workspaces (KES 0 / mo)</p>
           </CardContent>
         </Card>
 
-        {/* Pro Plan */}
         <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
           <CardHeader className="pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-brand">
@@ -156,12 +637,15 @@ export default function AdminBillingPage() {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Workspaces ($49 / mo) · MRR: ${(activeProCount * 49).toLocaleString()}
+              Pro workspaces · MRR: KES{" "}
+              {(
+                activeProCount *
+                (plans?.find((p) => p.key === "pro")?.priceMonthly ?? 6500)
+              ).toLocaleString()}
             </p>
           </CardContent>
         </Card>
 
-        {/* Scale Plan */}
         <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
           <CardHeader className="pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400">
@@ -176,13 +660,106 @@ export default function AdminBillingPage() {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Workspaces ($199 / mo) · MRR: ${(activeScaleCount * 199).toLocaleString()}
+              Scale workspaces · MRR: KES{" "}
+              {(
+                activeScaleCount *
+                (plans?.find((p) => p.key === "scale")?.priceMonthly ?? 26000)
+              ).toLocaleString()}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Subscription Breakdown */}
+      {/* ─── Plans Management ─────────────────────────────────────────────── */}
+      <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex size-6 items-center justify-center rounded bg-brand/10 text-brand">
+                <Layers className="size-4" />
+              </span>
+              <div>
+                <CardTitle className="text-lg">Subscription Plans</CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Manage the plans available to users. Maximum 10 plans.
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingPlan(null);
+                setShowPlanForm(true);
+              }}
+              disabled={planCount >= 10}
+              className="w-full sm:w-auto gap-1.5"
+            >
+              <Plus className="size-4" />
+              {planCount >= 10 ? "Max 10 plans" : "Add Plan"}
+            </Button>
+          </div>
+
+          {/* Slot indicator */}
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex gap-1">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 w-5 rounded-full transition-colors ${
+                    i < planCount ? "bg-brand" : "bg-muted"
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {planCount}/10 plans used
+            </span>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {planCount === 0 ? (
+            <div className="grid place-items-center py-12 text-center">
+              <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground mb-4">
+                <PackagePlus className="size-6" />
+              </div>
+              <h3 className="font-semibold text-foreground">No plans yet</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                Create your first subscription plan to get started.
+              </p>
+              <Button
+                size="sm"
+                className="mt-4 gap-1.5"
+                onClick={() => {
+                  setEditingPlan(null);
+                  setShowPlanForm(true);
+                }}
+              >
+                <Plus className="size-4" />
+                Create First Plan
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <AnimatePresence mode="popLayout">
+                {plans?.map((plan) => (
+                  <PlanCard
+                    key={plan._id}
+                    plan={plan as BillingPlan}
+                    onEdit={(p) => {
+                      setEditingPlan(p);
+                      setShowPlanForm(true);
+                    }}
+                    onDelete={(p) => setDeletingPlan(p)}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Subscription Directory */}
       <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -212,55 +789,58 @@ export default function AdminBillingPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Workspace</TableHead>
-                    <TableHead>Plan Slug</TableHead>
-                    <TableHead>Billing State</TableHead>
-                    <TableHead>Contribution</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Price/mo</TableHead>
                     <TableHead className="text-center">Members</TableHead>
                     <TableHead className="text-center">Conversations</TableHead>
                     <TableHead className="text-center">AI Messages</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paidSubscribers?.map((ws) => (
-                    <TableRow key={ws._id} className="hover:bg-muted/30">
-                      <TableCell className="font-medium">
-                        <div className="flex flex-col">
-                          <span className="text-foreground font-semibold">{ws.name}</span>
-                          <span className="text-[11px] text-muted-foreground font-mono">
-                            {ws.slug || "no-slug"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={`capitalize font-semibold text-[10px] px-2 py-0.5 ${getPlanBadgeColor(ws.planSlug)}`}
-                        >
-                          {ws.planSlug}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={`capitalize font-semibold text-[10px] px-2 py-0.5 ${getStatusBadgeColor(ws.subscriptionStatus)}`}
-                        >
-                          {ws.subscriptionStatus === "active" ? "Active" : ws.subscriptionStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-bold text-foreground">
-                        ${getPlanPrice(ws.planSlug)}/mo
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-muted-foreground">
-                        {ws.membersCount}
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-muted-foreground">
-                        {ws.conversationsCount}
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-muted-foreground">
-                        {ws.aiMessagesCount.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {paidSubscribers?.map((ws) => {
+                    const planDef = plans?.find((p) => p.key === ws.planSlug);
+                    return (
+                      <TableRow key={ws._id} className="hover:bg-muted/30">
+                        <TableCell className="font-medium">
+                          <div className="flex flex-col">
+                            <span className="text-foreground font-semibold">{ws.name}</span>
+                            <span className="text-[11px] text-muted-foreground font-mono">
+                              {ws.slug || "no-slug"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`capitalize font-semibold text-[10px] px-2 py-0.5 ${getPlanBadgeColor(ws.planSlug)}`}
+                          >
+                            {planDef?.name ?? ws.planSlug}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`capitalize font-semibold text-[10px] px-2 py-0.5 ${getStatusBadgeColor(ws.subscriptionStatus)}`}
+                          >
+                            {ws.subscriptionStatus === "active" ? "Active" : ws.subscriptionStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-bold text-foreground whitespace-nowrap">
+                          KES {(planDef?.priceMonthly ?? 0).toLocaleString()}/mo
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-muted-foreground">
+                          {ws.membersCount}
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-muted-foreground">
+                          {ws.conversationsCount}
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-muted-foreground">
+                          {ws.aiMessagesCount.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -269,7 +849,7 @@ export default function AdminBillingPage() {
       </Card>
 
       {/* M-Pesa Transactions Audit Card */}
-      <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft mt-6">
+      <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
         <CardHeader>
           <div className="flex items-center gap-2">
             <span className="flex size-6 items-center justify-center rounded bg-emerald-500/10 text-emerald-500">
@@ -299,12 +879,12 @@ export default function AdminBillingPage() {
                   <TableRow>
                     <TableHead>Date / Time</TableHead>
                     <TableHead>Workspace</TableHead>
-                    <TableHead>Phone Number</TableHead>
+                    <TableHead>Phone</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Plan</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Receipt / Error</TableHead>
-                    <TableHead>Checkout Request ID</TableHead>
+                    <TableHead>Checkout ID</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -334,7 +914,7 @@ export default function AdminBillingPage() {
                           variant="outline"
                           className={`capitalize font-semibold text-[10px] px-2 py-0.5 ${getPlanBadgeColor(tx.planSlug)}`}
                         >
-                          {tx.planSlug}
+                          {plans?.find((p) => p.key === tx.planSlug)?.name ?? tx.planSlug}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -369,6 +949,43 @@ export default function AdminBillingPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Plan Form Dialog */}
+      {showPlanForm && (
+        <PlanFormDialog
+          open={showPlanForm}
+          onClose={() => {
+            setShowPlanForm(false);
+            setEditingPlan(null);
+          }}
+          editingPlan={editingPlan}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deletingPlan} onOpenChange={(v) => !v && setDeletingPlan(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete &quot;{deletingPlan?.name}&quot; plan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the <strong>{deletingPlan?.name}</strong> plan. Workspaces
+              currently on this plan will fall back to defaults on their next billing cycle. This
+              action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Delete Plan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

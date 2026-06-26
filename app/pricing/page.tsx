@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "@/convex/_generated/api";
@@ -78,6 +78,33 @@ export default function PricingPage() {
     setIsMounted(true);
   }, []);
 
+  // Fetch plans from DB; fall back to static PLAN_DISPLAY_LIST if empty
+  const dbPlans = useQuery(api.plans.list);
+  const planDisplayList = useMemo(() => {
+    if (!dbPlans || dbPlans.length === 0) return PLAN_DISPLAY_LIST;
+    // Map DB plans to PlanDisplay shape, keeping all 3 legacy slugs ordered
+    const ordered = ["free_org", "pro", "scale"];
+    const sorted = [...dbPlans].sort(
+      (a, b) => ordered.indexOf(a.key) - ordered.indexOf(b.key)
+    );
+    return sorted.map((p) => ({
+      slug: p.key as PlanSlug,
+      name: p.name,
+      priceMonthly: p.priceMonthly,
+      tagline: p.tagline,
+      highlighted: p.highlighted,
+      def: PLANS[p.key as PlanSlug] ?? PLANS.free_org,
+      bullets: [
+        `${p.limits.aiMessagesPerMonth.toLocaleString()} AI messages / month`,
+        `${p.limits.seats} ${p.limits.seats === 1 ? "seat" : "seats"}`,
+        `${p.limits.kbDocuments.toLocaleString()} knowledge base documents`,
+        ...(p.limits.crawlPages > 0
+          ? [`Crawl up to ${p.limits.crawlPages.toLocaleString()} pages`]
+          : []),
+      ],
+    }));
+  }, [dbPlans]);
+
   return (
     <main className="flex min-h-dvh flex-col bg-background text-foreground">
       <PricingHeader />
@@ -128,23 +155,20 @@ export default function PricingPage() {
       {/* ── Branded plan cards (pulled up over the hero fade) ───────────────── */}
       <section className="relative z-10 mx-auto -mt-28 w-full max-w-6xl px-6">
         <div className="grid items-stretch gap-6 lg:grid-cols-3">
-          {PLAN_DISPLAY_LIST.map((plan, i) => {
+          {planDisplayList.map((plan, i) => {
             const planId = PUBLIC_PLAN_IDS[plan.slug];
-            const allFeatures = plan.def.features;
+            const allFeatures = plan.def?.features ?? [];
             return (
               <Reveal key={plan.slug} delay={i * 0.08} className="h-full">
                 <Card
                   className={
                     plan.highlighted
-                      ? // overflow-visible so the -top-3 "Most popular" badge isn't
-                        // clipped by the Card's default overflow-hidden.
-                        "border-brand/40 relative flex h-full flex-col overflow-visible rounded-3xl bg-card p-2 shadow-elevated ring-2 ring-brand/30 lg:-translate-y-3"
+                      ? "border-brand/40 relative flex h-full flex-col overflow-visible rounded-3xl bg-card p-2 shadow-elevated ring-2 ring-brand/30 lg:-translate-y-3"
                       : "relative flex h-full flex-col rounded-3xl border-border bg-card p-2 shadow-card transition-shadow hover:shadow-elevated"
                   }
                 >
                   {plan.highlighted && (
                     <>
-                      {/* Soft brand glow behind the recommended card */}
                       <div
                         aria-hidden
                         className="pointer-events-none absolute -inset-px -z-10 rounded-3xl bg-gradient-to-br from-brand/20 to-brand-2/20 blur-md"
@@ -182,9 +206,8 @@ export default function PricingPage() {
                           <span className="leading-snug">{bullet}</span>
                         </li>
                       ))}
-                      {/* Features NOT in this plan, shown muted for comparison. */}
                       {(["website_crawl", "proactive_messages", "remove_branding"] as const)
-                        .filter((f) => !allFeatures.includes(f))
+                        .filter((f) => !allFeatures.includes(f as Feature))
                         .map((f) => (
                           <li
                             key={f}
@@ -206,6 +229,7 @@ export default function PricingPage() {
                       planId={planId}
                       isFree={plan.priceMonthly === 0}
                       highlighted={plan.highlighted}
+                      priceMonthly={plan.priceMonthly}
                     />
                   </CardFooter>
                 </Card>
@@ -584,11 +608,13 @@ function PlanCta({
   planId,
   isFree,
   highlighted,
+  priceMonthly,
 }: {
   planSlug: PlanSlug;
   planId: string | undefined;
   isFree: boolean;
   highlighted?: boolean;
+  priceMonthly?: number;
 }) {
   const router = useRouter();
   const initiateMpesa = useAction(api.mpesa.initiateMpesaStkPush);
@@ -767,7 +793,7 @@ function PlanCta({
                         Initiating...
                       </>
                     ) : (
-                      <>Send STK Push (KES {planSlug === "pro" ? "6,500" : "26,000"})</>
+                      <>Send STK Push (KES {(priceMonthly ?? 0).toLocaleString()})</>
                     )}
                   </Button>
                 </div>

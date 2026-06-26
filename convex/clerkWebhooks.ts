@@ -211,9 +211,9 @@ export const upsertSubscription = internalMutation({
       slug: args.orgSlug,
     });
 
-    const plan = getPlan(args.planSlug);
-    const limits = planLimits(args.planSlug);
-    const features = planFeatures(args.planSlug);
+    const plan = await getPlan(ctx, args.planSlug);
+    const limits = await planLimits(ctx, args.planSlug);
+    const features = await planFeatures(ctx, args.planSlug);
     const seats = args.seats ?? limits.seats;
 
     // Find an existing row to upsert: prefer subscriptionItemId, then

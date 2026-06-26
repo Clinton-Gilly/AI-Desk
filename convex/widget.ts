@@ -169,7 +169,7 @@ async function resolveRemoveBranding(
   // No subscription row ⇒ implicit Free ⇒ branding shown.
   if (!sub) return false;
 
-  return planFeatures(sub.planSlug).includes("remove_branding");
+  return (await planFeatures(ctx, sub.planSlug)).includes("remove_branding");
 }
 
 const settingsShape = v.object({
