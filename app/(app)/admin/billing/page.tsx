@@ -16,6 +16,10 @@ import {
   Loader2,
   PackagePlus,
   Layers,
+  TrendingUp,
+  AlertTriangle,
+  TicketPercent,
+  Calendar,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -62,6 +66,8 @@ type BillingPlan = {
   key: string;
   name: string;
   priceMonthly: number;
+  priceYearly?: number;
+  trialDays?: number;
   tagline: string;
   highlighted: boolean;
   features: string[];
@@ -70,6 +76,8 @@ type BillingPlan = {
     kbDocuments: number;
     crawlPages: number;
     seats: number;
+    conversationsPerMonth?: number;
+    dataRetentionDays?: number;
   };
 };
 
@@ -86,6 +94,8 @@ const DEFAULT_FORM = {
   key: "",
   name: "",
   priceMonthly: 0,
+  priceYearly: 0,
+  trialDays: 0,
   tagline: "",
   highlighted: false,
   features: [] as string[],
@@ -94,6 +104,8 @@ const DEFAULT_FORM = {
     kbDocuments: 10,
     crawlPages: 0,
     seats: 2,
+    conversationsPerMonth: 500,
+    dataRetentionDays: 30,
   },
 };
 
@@ -116,6 +128,8 @@ function PlanFormDialog({
           key: editingPlan.key,
           name: editingPlan.name,
           priceMonthly: editingPlan.priceMonthly,
+          priceYearly: editingPlan.priceYearly ?? 0,
+          trialDays: editingPlan.trialDays ?? 0,
           tagline: editingPlan.tagline,
           highlighted: editingPlan.highlighted,
           features: [...editingPlan.features],
@@ -229,6 +243,28 @@ function PlanFormDialog({
                 onChange={(e) => setForm((f) => ({ ...f, priceMonthly: Number(e.target.value) }))}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-price-yearly">Price / Year (KES)</Label>
+              <Input
+                id="plan-price-yearly"
+                type="number"
+                min={0}
+                value={form.priceYearly}
+                onChange={(e) => setForm((f) => ({ ...f, priceYearly: Number(e.target.value) }))}
+                placeholder="0 = no annual plan"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-trial">Free Trial (Days)</Label>
+              <Input
+                id="plan-trial"
+                type="number"
+                min={0}
+                value={form.trialDays}
+                onChange={(e) => setForm((f) => ({ ...f, trialDays: Number(e.target.value) }))}
+                placeholder="0 = no trial"
+              />
+            </div>
             <div className="flex items-center gap-3 pt-6">
               <Switch
                 id="plan-highlighted"
@@ -251,6 +287,8 @@ function PlanFormDialog({
                   { field: "kbDocuments", label: "KB Documents" },
                   { field: "crawlPages", label: "Crawl Pages" },
                   { field: "seats", label: "Team Seats" },
+                  { field: "conversationsPerMonth", label: "Conversations/mo" },
+                  { field: "dataRetentionDays", label: "Data Retention (Days)" },
                 ] as const
               ).map(({ field, label }) => (
                 <div key={field} className="space-y-1.5">
@@ -447,6 +485,14 @@ function PlanCard({
           <span className="text-muted-foreground">Seats</span>
           <span className="block font-semibold text-foreground">{plan.limits.seats}</span>
         </div>
+        <div>
+          <span className="text-muted-foreground">Conversations</span>
+          <span className="block font-semibold text-foreground">{plan.limits.conversationsPerMonth?.toLocaleString() ?? "Unlimited"}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Retention</span>
+          <span className="block font-semibold text-foreground">{plan.limits.dataRetentionDays === -1 ? "Unlimited" : `${plan.limits.dataRetentionDays} days`}</span>
+        </div>
       </div>
 
       {/* Features toggle */}
@@ -492,8 +538,15 @@ export default function AdminBillingPage() {
   const stats = useQuery(api.admin.getOverviewStats);
   const workspaces = useQuery(api.admin.listWorkspaces);
   const mpesaTransactions = useQuery(api.admin.listAllMpesaTransactions);
+  const mrrHistory = useQuery(api.admin.getMrrHistory);
+  const usageAlerts = useQuery(api.admin.getUsageAlerts);
+  const coupons = useQuery(api.coupons.list);
   const plans = useQuery(api.plans.list);
+  
   const removePlan = useMutation(api.plans.remove);
+  const createCoupon = useMutation(api.coupons.create);
+  const toggleCoupon = useMutation(api.coupons.toggle);
+  const removeCoupon = useMutation(api.coupons.remove);
 
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [editingPlan, setEditingPlan] = useState<BillingPlan | null>(null);
@@ -504,7 +557,10 @@ export default function AdminBillingPage() {
     stats === undefined ||
     workspaces === undefined ||
     mpesaTransactions === undefined ||
-    plans === undefined;
+    plans === undefined ||
+    mrrHistory === undefined ||
+    usageAlerts === undefined ||
+    coupons === undefined;
 
   // Filter workspaces with paid plans
   const paidSubscribers = workspaces?.filter(
@@ -669,6 +725,195 @@ export default function AdminBillingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ─── MRR & Usage Alerts ─────────────────────────────────────────── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* MRR Chart */}
+        <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft sm:col-span-2">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <span className="flex size-6 items-center justify-center rounded bg-emerald-500/10 text-emerald-500">
+                <TrendingUp className="size-4" />
+              </span>
+              <CardTitle className="text-lg">MRR History</CardTitle>
+            </div>
+            <CardDescription className="text-xs mt-0.5">
+              Monthly Recurring Revenue based on completed M-Pesa transactions (last 6 months).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {mrrHistory?.length === 0 ? (
+              <div className="h-48 grid place-items-center text-sm text-muted-foreground">
+                No revenue data available
+              </div>
+            ) : (
+              <div className="h-48 flex items-end gap-2 pt-4">
+                {mrrHistory?.map((data, i) => {
+                  const maxRev = Math.max(...(mrrHistory.map(d => d.revenue) || [1]));
+                  const height = data.revenue > 0 ? Math.max((data.revenue / maxRev) * 100, 4) : 0;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+                      <div className="relative w-full flex justify-center h-full items-end">
+                        <div 
+                          className="w-full max-w-12 bg-emerald-500/80 rounded-t-sm transition-all group-hover:bg-emerald-400"
+                          style={{ height: `${height}%` }}
+                        />
+                        {/* Tooltip */}
+                        <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-foreground text-background text-[10px] py-1 px-2 rounded whitespace-nowrap pointer-events-none">
+                          KES {data.revenue.toLocaleString()}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground uppercase">{data.month}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Usage Alerts */}
+        <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <span className="flex size-6 items-center justify-center rounded bg-amber-500/10 text-amber-500">
+                <AlertTriangle className="size-4" />
+              </span>
+              <CardTitle className="text-lg">Usage Alerts</CardTitle>
+            </div>
+            <CardDescription className="text-xs mt-0.5">
+              Workspaces approaching their AI message limits (&ge;80%).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!usageAlerts || usageAlerts.length === 0 ? (
+              <div className="h-48 grid place-items-center text-sm text-muted-foreground text-center">
+                All workspaces are operating<br/>within safe limits.
+              </div>
+            ) : (
+              <div className="space-y-3 h-48 overflow-y-auto pr-2">
+                {usageAlerts.map((alert, i) => (
+                  <div key={i} className="flex flex-col gap-1.5 p-3 rounded-lg border border-border bg-muted/30">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-sm truncate pr-2">{alert.workspaceName}</span>
+                      <Badge variant={alert.percent >= 100 ? "destructive" : "outline"} className={alert.percent < 100 ? "text-amber-500 border-amber-500/30 bg-amber-500/10" : ""}>
+                        {alert.percent}%
+                      </Badge>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-1.5">
+                      <div 
+                        className={`h-1.5 rounded-full ${alert.percent >= 100 ? "bg-destructive" : "bg-amber-500"}`} 
+                        style={{ width: `${Math.min(alert.percent, 100)}%` }} 
+                      />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground flex justify-between">
+                      <span>{alert.used.toLocaleString()} msgs used</span>
+                      <span>{alert.limit.toLocaleString()} limit</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ─── Coupons Manager ────────────────────────────────────────────── */}
+      <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex size-6 items-center justify-center rounded bg-blue-500/10 text-blue-500">
+                <TicketPercent className="size-4" />
+              </span>
+              <div>
+                <CardTitle className="text-lg">Promo Codes &amp; Coupons</CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Create discount codes for new signups or promotions.
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                // Implement open coupon form
+                const code = window.prompt("Enter Coupon Code (e.g. LAUNCH50)");
+                if (!code) return;
+                const discount = parseInt(window.prompt("Enter Discount Percent (1-100)", "50") || "0", 10);
+                if (discount <= 0 || discount > 100) return toast.error("Invalid discount");
+                const maxUses = parseInt(window.prompt("Enter Max Uses (0 = unlimited)", "0") || "0", 10);
+                
+                createCoupon({ code, discountPercent: discount, maxUses })
+                  .then(() => toast.success("Coupon created!"))
+                  .catch(e => toast.error(e.message));
+              }}
+              className="w-full sm:w-auto gap-1.5"
+            >
+              <Plus className="size-4" />
+              Add Coupon
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {!coupons || coupons.length === 0 ? (
+            <div className="grid place-items-center py-8 text-center text-sm text-muted-foreground">
+              No coupons created yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Discount</TableHead>
+                    <TableHead>Usage</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {coupons.map((coupon) => (
+                    <TableRow key={coupon._id}>
+                      <TableCell className="font-mono font-bold text-foreground">
+                        {coupon.code}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                          {coupon.discountPercent}% OFF
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {coupon.usedCount} / {coupon.maxUses === 0 ? "∞" : coupon.maxUses}
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={coupon.active}
+                          onCheckedChange={(active) => toggleCoupon({ id: coupon._id, active })}
+                          aria-label="Toggle coupon status"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            if (window.confirm("Delete this coupon?")) {
+                              removeCoupon({ id: coupon._id });
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ─── Plans Management ─────────────────────────────────────────────── */}
       <Card className="border-border bg-card/60 backdrop-blur-md shadow-soft">

@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Accordion,
   AccordionContent,
@@ -74,6 +75,7 @@ const PUBLIC_PLAN_IDS: Record<PlanSlug, string | undefined> = {
 
 export default function PricingPage() {
   const [isMounted, setIsMounted] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(false);
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -91,6 +93,8 @@ export default function PricingPage() {
       slug: p.key as PlanSlug,
       name: p.name,
       priceMonthly: p.priceMonthly,
+      priceYearly: p.priceYearly,
+      trialDays: p.trialDays,
       tagline: p.tagline,
       highlighted: p.highlighted,
       def: PLANS[p.key as PlanSlug] ?? PLANS.free_org,
@@ -149,6 +153,15 @@ export default function PricingPage() {
             Start free. Upgrade when you need crawling, proactive messages, and
             higher AI quotas. Billed per organization — no surprise overages.
           </p>
+          <div className="mx-auto mt-10 flex w-fit items-center gap-3 rounded-full border border-white/20 bg-white/5 p-2 backdrop-blur sm:mt-12">
+            <span className={!isAnnual ? "text-sm font-semibold text-white px-2" : "text-sm font-medium text-white/60 px-2 cursor-pointer"} onClick={() => setIsAnnual(false)}>
+              Monthly
+            </span>
+            <Switch checked={isAnnual} onCheckedChange={setIsAnnual} className="data-[state=checked]:bg-brand-2" />
+            <span className={isAnnual ? "text-sm font-semibold text-white px-2" : "text-sm font-medium text-white/60 px-2 cursor-pointer"} onClick={() => setIsAnnual(true)}>
+              Yearly <span className="ml-1 rounded bg-brand/20 px-1.5 py-0.5 text-[10px] uppercase text-brand-2">Save 2 months</span>
+            </span>
+          </div>
         </div>
       </section>
 
@@ -188,10 +201,10 @@ export default function PricingPage() {
                     </CardDescription>
                     <div className="mt-3 flex items-baseline gap-1.5">
                       <span className="text-5xl font-semibold tracking-tight">
-                        KES {plan.priceMonthly.toLocaleString()}
+                        KES {(isAnnual && plan.priceYearly ? plan.priceYearly / 12 : plan.priceMonthly).toLocaleString()}
                       </span>
                       <span className="text-muted-foreground text-sm">
-                        /month
+                        /month {isAnnual && plan.priceYearly ? "billed yearly" : ""}
                       </span>
                     </div>
                   </CardHeader>
@@ -229,7 +242,9 @@ export default function PricingPage() {
                       planId={planId}
                       isFree={plan.priceMonthly === 0}
                       highlighted={plan.highlighted}
-                      priceMonthly={plan.priceMonthly}
+                      price={isAnnual && plan.priceYearly ? plan.priceYearly : plan.priceMonthly}
+                      isAnnual={isAnnual}
+                      trialDays={plan.trialDays}
                     />
                   </CardFooter>
                 </Card>
@@ -608,19 +623,28 @@ function PlanCta({
   planId,
   isFree,
   highlighted,
-  priceMonthly,
+  price,
+  isAnnual,
+  trialDays,
 }: {
   planSlug: PlanSlug;
   planId: string | undefined;
   isFree: boolean;
   highlighted?: boolean;
-  priceMonthly?: number;
+  price?: number;
+  isAnnual?: boolean;
+  trialDays?: number;
 }) {
   const router = useRouter();
   const initiateMpesa = useAction(api.mpesa.initiateMpesaStkPush);
+  const validateCoupon = useQuery(api.coupons.validate, { code: "" }); // Will handle manually if possible or just use action
+
   
   const [isMpesaModalOpen, setIsMpesaModalOpen] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponError, setCouponError] = useState("");
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [isInitiating, setIsInitiating] = useState(false);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [pollingStatus, setPollingStatus] = useState<"idle" | "sent" | "completed" | "failed">("idle");
@@ -650,6 +674,9 @@ function PlanCta({
   const handleUpgradeClick = () => {
     setIsMpesaModalOpen(true);
     setPhoneNumber("");
+    setCouponCode("");
+    setCouponError("");
+    setDiscountPercent(0);
     setCheckoutRequestId(null);
     setPollingStatus("idle");
     setTxError(null);
@@ -663,6 +690,8 @@ function PlanCta({
       const res = await initiateMpesa({
         phoneNumber,
         planSlug: planSlug as "pro" | "scale",
+        isAnnual,
+        couponCode: couponCode.trim() || undefined,
       });
       if (res.success && res.checkoutRequestID) {
         setCheckoutRequestId(res.checkoutRequestID);
@@ -719,7 +748,7 @@ function PlanCta({
               className={variantClass}
               variant={highlighted ? "default" : "outline"}
             >
-              Upgrade to {planSlug === "pro" ? "Pro" : "Scale"}
+              {trialDays ? `Start ${trialDays}-day free trial` : `Upgrade to ${planSlug === "pro" ? "Pro" : "Scale"}`}
             </Button>
           </>
         ) : (
@@ -782,10 +811,32 @@ function PlanCta({
                     </div>
                   </div>
 
+                  {/* Coupon Code - In a real app we'd validate this with a convex query */}
+                  <div className="space-y-1.5 pt-1 border-t border-border mt-3">
+                    <Label htmlFor="mpesa-coupon" className="text-xs font-bold text-muted-foreground uppercase">
+                      Promo Code (Optional)
+                    </Label>
+                    <div className="relative flex gap-2">
+                      <Input
+                        id="mpesa-coupon"
+                        placeholder="e.g. LAUNCH50"
+                        value={couponCode}
+                        onChange={(e) => {
+                          setCouponCode(e.target.value);
+                          setCouponError("");
+                          setDiscountPercent(0);
+                        }}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    {couponError && <p className="text-[10px] text-rose-500 font-medium">{couponError}</p>}
+                    {discountPercent > 0 && <p className="text-[10px] text-emerald-500 font-medium">{discountPercent}% discount applied!</p>}
+                  </div>
+
                   <Button
                     onClick={handleMpesaPay}
                     disabled={isInitiating || !phoneNumber.trim()}
-                    className="w-full h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 cursor-pointer"
+                    className="w-full h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 cursor-pointer mt-2"
                   >
                     {isInitiating ? (
                       <>
@@ -793,7 +844,7 @@ function PlanCta({
                         Initiating...
                       </>
                     ) : (
-                      <>Send STK Push (KES {(priceMonthly ?? 0).toLocaleString()})</>
+                      <>Send STK Push (KES {(price ?? 0).toLocaleString()})</>
                     )}
                   </Button>
                 </div>

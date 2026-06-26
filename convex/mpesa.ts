@@ -9,6 +9,8 @@ export const initiateMpesaStkPush = action({
   args: {
     phoneNumber: v.string(),
     planSlug: v.string(),
+    isAnnual: v.optional(v.boolean()),
+    couponCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // 1. Authenticate caller (must be workspace admin)
@@ -38,10 +40,29 @@ export const initiateMpesaStkPush = action({
 
     // Determine amount in KES by querying the database for the dynamic plan
     const plan: any = await ctx.runQuery(api.plans.get, { key: args.planSlug });
-    if (!plan || plan.priceMonthly <= 0) {
-      throw new ConvexError("Invalid plan or plan is free.");
+    if (!plan) {
+      throw new ConvexError("Invalid plan.");
     }
-    const amount = plan.priceMonthly;
+    
+    let amount = args.isAnnual && plan.priceYearly ? plan.priceYearly : plan.priceMonthly;
+    
+    // Apply Coupon
+    if (args.couponCode) {
+      try {
+        const couponResult = await ctx.runQuery(api.coupons.validate, { code: args.couponCode });
+        if (couponResult.valid && couponResult.discountPercent) {
+          amount = Math.floor(amount * (1 - couponResult.discountPercent / 100));
+        } else {
+          throw new ConvexError("Coupon code is invalid or expired.");
+        }
+      } catch (err) {
+        throw new ConvexError("Coupon code is invalid or expired.");
+      }
+    }
+    
+    if (amount <= 0) {
+      throw new ConvexError("Amount after discount is 0 or less. Cannot initiate payment.");
+    }
 
     const consumerKey = process.env.MPESA_CONSUMER_KEY;
     const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
@@ -135,6 +156,8 @@ export const initiateMpesaStkPush = action({
       checkoutRequestID: resBody.CheckoutRequestID,
       merchantRequestID: resBody.MerchantRequestID,
       planSlug: args.planSlug,
+      isAnnual: args.isAnnual,
+      couponCode: args.couponCode,
     });
 
     return {
@@ -166,6 +189,8 @@ export const savePendingMpesaTransaction = internalMutation({
     checkoutRequestID: v.string(),
     merchantRequestID: v.string(),
     planSlug: v.string(),
+    isAnnual: v.optional(v.boolean()),
+    couponCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("mpesaTransactions", {
@@ -207,13 +232,22 @@ export const updateMpesaTransactionStatus = mutation({
 
     // If successful, provision the plan in clerkWebhooks subscription table
     if (args.status === "completed") {
+      // Mark coupon as used if it exists
+      if (tx.couponCode) {
+        try {
+          await ctx.runMutation(api.coupons.apply, { code: tx.couponCode });
+        } catch (e) {
+          console.error("Failed to apply coupon:", e);
+        }
+      }
+
       await ctx.runMutation(internal.clerkWebhooks.upsertSubscription, {
         clerkOrgId: tx.clerkOrgId,
         subscriptionId: "mpesa_" + tx.checkoutRequestID,
         planSlug: tx.planSlug,
         status: "active",
         currentPeriodStart: Date.now(),
-        currentPeriodEnd: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+        currentPeriodEnd: Date.now() + (tx.isAnnual ? 365 : 30) * 24 * 60 * 60 * 1000,
       });
       console.log(`[mpesa-callback] Successfully upgraded org ${tx.clerkOrgId} to ${tx.planSlug} via M-Pesa receipt ${args.mpesaReceiptNumber}`);
     }

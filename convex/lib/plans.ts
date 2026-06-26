@@ -42,6 +42,8 @@ export type PlanLimits = {
   kbDocuments: number;
   crawlPages: number;
   seats: number;
+  conversationsPerMonth?: number;
+  dataRetentionDays?: number;
 };
 
 export type PlanDefinition = {
@@ -61,6 +63,8 @@ export const PLANS: Record<PlanSlug, PlanDefinition> = {
       kbDocuments: 10,
       crawlPages: 0,
       seats: 2,
+      conversationsPerMonth: 500,
+      dataRetentionDays: 30,
     },
   },
   pro: {
@@ -79,6 +83,8 @@ export const PLANS: Record<PlanSlug, PlanDefinition> = {
       kbDocuments: 200,
       crawlPages: 200,
       seats: 10,
+      conversationsPerMonth: 5000,
+      dataRetentionDays: 365,
     },
   },
   scale: {
@@ -98,6 +104,8 @@ export const PLANS: Record<PlanSlug, PlanDefinition> = {
       crawlPages: 2000,
       // <= 20 keeps us off Clerk's paid B2B add-on for MVP (Locked-decision #2).
       seats: 20,
+      conversationsPerMonth: 50000,
+      dataRetentionDays: -1, // -1 or unlimited
     },
   },
 };

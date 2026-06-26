@@ -34,6 +34,79 @@ export const isAdminCheck = query({
   },
 });
 
+export const getMrrHistory = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireGlobalAdmin(ctx);
+    
+    // Simplistic MRR history based on M-Pesa transactions.
+    // In a real app, this would be computed by tracking active subscription snapshots.
+    // Here we'll sum successful M-Pesa transactions per month.
+    const transactions = await ctx.db
+      .query("mpesaTransactions")
+      .filter((q) => q.eq(q.field("status"), "completed"))
+      .collect();
+
+    const history = [];
+    const now = new Date();
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const startOfMonth = d.getTime();
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999).getTime();
+      
+      const monthTx = transactions.filter(t => t.createdAt >= startOfMonth && t.createdAt <= endOfMonth);
+      const revenue = monthTx.reduce((sum, t) => sum + t.amount, 0);
+      
+      history.push({
+        month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+        revenue,
+      });
+    }
+    
+    return history;
+  },
+});
+
+export const getUsageAlerts = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireGlobalAdmin(ctx);
+    
+    // Find workspaces where AI usage is > 80% of limit
+    const usage = await ctx.db.query("usage").collect();
+    const subs = await ctx.db.query("subscriptions").collect();
+    const workspaces = await ctx.db.query("workspaces").collect();
+    
+    const alerts: Array<{ workspaceName: string; used: number; limit: number; percent: number }> = [];
+    
+    for (const u of usage) {
+      // Find latest subscription for this org
+      const sub = subs.filter(s => s.clerkOrgId === u.clerkOrgId).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (!sub) continue;
+      
+      const limit = sub.limits.aiMessagesPerMonth;
+      if (limit <= 0) continue; // Unlimited or free? Treat <=0 as no limit or 0 limit.
+      
+      const percent = Math.round((u.aiMessages / limit) * 100);
+      if (percent >= 80) {
+        const ws = workspaces.find(w => w._id === u.workspaceId);
+        alerts.push({
+          workspaceName: ws ? ws.name : "Unknown",
+          used: u.aiMessages,
+          limit,
+          percent,
+        });
+      }
+    }
+    
+    // Sort highest percentage first
+    alerts.sort((a, b) => b.percent - a.percent);
+    
+    return alerts;
+  },
+});
+
 // Compile global platform statistics for the Admin Dashboard.
 export const getOverviewStats = query({
   args: {},
@@ -77,7 +150,23 @@ export const getOverviewStats = query({
     const totalPaidSubscribed = subscriptions.filter((s) => s.status === "active").length;
     subscriptionStats.free_org = Math.max(0, totalWorkspaces - totalPaidSubscribed);
 
-    const estimatedMRR = activeProCount * 49 + activeScaleCount * 199;
+    // Calculate actual estimated MRR using dynamic plan pricing instead of hardcoded
+    const plans = await ctx.db.query("billingPlans").collect();
+    const proPlan = plans.find(p => p.key === "pro");
+    const scalePlan = plans.find(p => p.key === "scale");
+    const proPrice = proPlan?.priceMonthly || 6500;
+    const scalePrice = scalePlan?.priceMonthly || 26000;
+
+    const estimatedMRR = activeProCount * proPrice + activeScaleCount * scalePrice;
+
+    const coupons = await ctx.db.query("coupons").collect();
+    const totalCouponRedemptions = coupons.reduce((sum, c) => sum + c.usedCount, 0);
+
+    const trialUsers = subscriptions.filter(s => s.trialEndsAt && s.trialEndsAt > Date.now()).length;
+
+    // Add-ons revenue
+    const addOns = await ctx.db.query("addOnPacks").collect();
+    const addOnPurchases = addOns.length;
 
     // 4. Fetch conversations
     const conversations = await ctx.db.query("conversations").collect();
@@ -256,6 +345,9 @@ export const getOverviewStats = query({
       totalLeads,
       totalCrawlPages,
       conversionRate,
+      totalCouponRedemptions,
+      trialUsers,
+      addOnPurchases,
       aiPerformance: {
         totalAiMessages: messageBreakdown.aiAgent,
         totalVisitorMessages: messageBreakdown.visitor,

@@ -31,6 +31,8 @@ export const create = mutation({
     key: v.string(),
     name: v.string(),
     priceMonthly: v.number(),
+    priceYearly: v.optional(v.number()),
+    trialDays: v.optional(v.number()),
     tagline: v.string(),
     highlighted: v.boolean(),
     features: v.array(v.string()),
@@ -39,6 +41,8 @@ export const create = mutation({
       kbDocuments: v.number(),
       crawlPages: v.number(),
       seats: v.number(),
+      conversationsPerMonth: v.optional(v.number()),
+      dataRetentionDays: v.optional(v.number()),
     }),
   },
   handler: async (ctx, args) => {
@@ -71,6 +75,8 @@ export const update = mutation({
     key: v.string(),
     name: v.string(),
     priceMonthly: v.number(),
+    priceYearly: v.optional(v.number()),
+    trialDays: v.optional(v.number()),
     tagline: v.string(),
     highlighted: v.boolean(),
     features: v.array(v.string()),
@@ -79,6 +85,8 @@ export const update = mutation({
       kbDocuments: v.number(),
       crawlPages: v.number(),
       seats: v.number(),
+      conversationsPerMonth: v.optional(v.number()),
+      dataRetentionDays: v.optional(v.number()),
     }),
   },
   handler: async (ctx, args) => {
@@ -124,18 +132,26 @@ export const initDefaultPlans = internalMutation({
       const def = PLANS[slug];
       
       let priceMonthly = 0;
+      let priceYearly = 0;
+      let trialDays = 0;
       let tagline = "";
       let highlighted = false;
 
       if (slug === "pro") {
         priceMonthly = 6500;
+        priceYearly = 65000;
+        trialDays = 14;
         tagline = "For growing teams that need crawling and proactive messaging.";
         highlighted = true;
       } else if (slug === "scale") {
         priceMonthly = 26000;
+        priceYearly = 260000;
+        trialDays = 0;
         tagline = "High-volume support with the largest quotas.";
       } else {
         priceMonthly = 0;
+        priceYearly = 0;
+        trialDays = 0;
         tagline = "Everything you need to launch an AI chat widget.";
       }
 
@@ -143,6 +159,8 @@ export const initDefaultPlans = internalMutation({
         key: slug,
         name: def.name,
         priceMonthly,
+        priceYearly,
+        trialDays,
         tagline,
         highlighted,
         features: def.features as string[],

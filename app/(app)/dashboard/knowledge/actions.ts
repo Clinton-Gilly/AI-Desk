@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { fetchMutation } from "convex/nextjs";
 import { ConvexError } from "convex/values";
 import { api } from "@/convex/_generated/api";
-import { PLANS, planHasFeature, type PlanSlug } from "@/convex/lib/plans";
+import { PLANS, type PlanSlug } from "@/convex/lib/plans";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crawl entitlement is enforced HERE, server-side, via Clerk's `has()`.
@@ -37,7 +37,7 @@ export async function startCrawlAction(
   const livePlan = resolvePlanSlug(has);
 
   // Authoritative, live entitlement check.
-  if (!planHasFeature(livePlan, "website_crawl") && !has({ feature: "website_crawl" })) {
+  if (!PLANS[livePlan].features.includes("website_crawl") && !has({ feature: "website_crawl" })) {
     return {
       ok: false,
       error: "Website crawling is not included in your plan.",

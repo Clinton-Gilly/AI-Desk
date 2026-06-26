@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { planHasFeature, type Feature, type PlanSlug } from "@/convex/lib/plans";
+import { PLANS, type Feature, type PlanSlug } from "@/convex/lib/plans";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client-side entitlement helpers (UI gating only).
@@ -36,7 +36,7 @@ export function useEntitlements(): Entitlements {
       const livePlanSlug = (["scale", "pro", "free_org"] as const).find((slug) =>
         has?.({ plan: slug })
       ) ?? "free_org";
-      return planHasFeature(livePlanSlug, feature) || (has?.({ feature }) ?? false);
+      return PLANS[livePlanSlug].features.includes(feature) || (has?.({ feature }) ?? false);
     },
     hasPlan: (plan: PlanSlug) =>
       isLoaded && !!orgId && (has?.({ plan }) ?? false),

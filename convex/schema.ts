@@ -255,6 +255,8 @@ export default defineSchema({
     key: v.string(), // e.g., "free_org", "pro", "scale"
     name: v.string(),
     priceMonthly: v.number(), // Price in KES
+    priceYearly: v.optional(v.number()), // Price in KES for annual billing (0 or undefined = no annual option)
+    trialDays: v.optional(v.number()), // Number of free trial days (0 or undefined = no trial)
     tagline: v.string(),
     highlighted: v.boolean(), // For the popular tier badge
     features: v.array(v.string()), // e.g., ["ai_messages", "website_crawl", ...]
@@ -263,6 +265,8 @@ export default defineSchema({
       kbDocuments: v.number(),
       crawlPages: v.number(),
       seats: v.number(),
+      conversationsPerMonth: v.optional(v.number()),
+      dataRetentionDays: v.optional(v.number()),
     }),
   }).index("by_key", ["key"]),
 
@@ -289,9 +293,16 @@ export default defineSchema({
       kbDocuments: v.number(),
       crawlPages: v.number(),
       seats: v.number(),
+      conversationsPerMonth: v.optional(v.number()),
+      dataRetentionDays: v.optional(v.number()),
     }),
     currentPeriodStart: v.optional(v.number()), // drives usage bucket window
     currentPeriodEnd: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number()),
+    annualBilling: v.optional(v.boolean()),
+    couponCode: v.optional(v.string()),
+    discountPercent: v.optional(v.number()),
+    overageAiMessages: v.optional(v.number()),
     updatedAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])
@@ -306,7 +317,30 @@ export default defineSchema({
     periodStart: v.number(), // = subscription currentPeriodStart (aligns quota to billing cycle)
     aiMessages: v.number(),
     kbDocuments: v.number(),
+    conversations: v.optional(v.number()),
+    overageAiMessages: v.optional(v.number()),
   }).index("by_workspace_period", ["workspaceId", "periodStart"]),
+
+  coupons: defineTable({
+    code: v.string(),
+    discountPercent: v.number(),
+    maxUses: v.number(),
+    usedCount: v.number(),
+    expiresAt: v.optional(v.number()),
+    createdBy: v.string(), // Admin email
+    active: v.boolean(),
+  }).index("by_code", ["code"]),
+
+  addOnPacks: defineTable({
+    workspaceId: v.id("workspaces"),
+    clerkOrgId: v.string(),
+    type: v.union(v.literal("ai_messages"), v.literal("kb_documents")),
+    quantity: v.number(),
+    remainingQuantity: v.number(),
+    purchasedAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    mpesaReceiptNumber: v.string(),
+  }).index("by_workspace", ["workspaceId"]),
 
   globalSettings: defineTable({
     guardrailsEnabled: v.boolean(),
@@ -325,6 +359,8 @@ export default defineSchema({
     status: v.union(v.literal("pending"), v.literal("completed"), v.literal("failed")),
     mpesaReceiptNumber: v.optional(v.string()),
     planSlug: v.string(),
+    isAnnual: v.optional(v.boolean()),
+    couponCode: v.optional(v.string()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),

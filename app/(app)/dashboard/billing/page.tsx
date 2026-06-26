@@ -16,14 +16,15 @@ import {
   Zap,
   Loader2,
   Phone,
+  PackagePlus,
 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
@@ -44,7 +45,7 @@ import {
   planName,
   statusLabel,
 } from "@/lib/planDisplay";
-import { planFeatures, type Feature } from "@/convex/lib/plans";
+import { type Feature } from "@/convex/lib/plans";
 
 // Clerk plan ids for the bespoke <CheckoutButton> (dev vs prod differ — sourced
 // from env, never hardcoded). When unset, the Upgrade CTA falls back to /pricing.
@@ -163,6 +164,11 @@ export default function BillingPage() {
     isAuthenticated && clerkLoaded && isAdmin ? {} : "skip",
   );
 
+  const addOns = useQuery(
+    api.addOns.list,
+    isAuthenticated && clerkLoaded && isAdmin ? {} : "skip",
+  );
+
   if (clerkLoaded && !isAdmin) {
     return (
       <div className="mx-auto w-full max-w-2xl p-6 lg:p-8">
@@ -246,7 +252,7 @@ export default function BillingPage() {
   );
 
   const featureKeys = Object.keys(FEATURE_LABELS) as Feature[];
-  const liveFeatures = planFeatures(livePlanSlug);
+  const liveFeatures = overview.features as Feature[];
   const includedCount = featureKeys.filter((f) =>
     liveFeatures.includes(f),
   ).length;
@@ -390,6 +396,73 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
+      {/* Add-Ons */}
+      {!isFree && (
+        <Card className="shadow-card">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">Add-on Packs</CardTitle>
+                <CardDescription>
+                  Need more limits without upgrading? Purchase an add-on pack.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+               {/* Active Add-ons */}
+               {addOns && addOns.length > 0 && (
+                 <div className="space-y-2 mb-6">
+                   <h4 className="text-sm font-semibold">Active Add-ons</h4>
+                   {addOns.filter(a => a.remainingQuantity > 0).map((addon) => (
+                     <div key={addon._id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                       <div>
+                         <p className="font-medium text-sm">
+                           {addon.type === "ai_messages" ? "AI Messages" : "KB Documents"}
+                         </p>
+                         <p className="text-xs text-muted-foreground mt-0.5">
+                           Purchased on {new Date(addon.purchasedAt).toLocaleDateString()}
+                         </p>
+                       </div>
+                       <div className="text-right">
+                         <p className="font-semibold text-sm tabular-nums">
+                           {addon.remainingQuantity.toLocaleString()} / {addon.quantity.toLocaleString()}
+                         </p>
+                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Remaining</p>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               )}
+
+               {/* Purchase options */}
+               <h4 className="text-sm font-semibold">Buy more</h4>
+               <div className="grid gap-4 sm:grid-cols-2">
+                 <div className="border border-border/60 bg-muted/10 p-4 rounded-xl flex justify-between items-center transition-colors hover:border-brand/40">
+                   <div>
+                     <p className="font-medium text-sm flex items-center gap-1.5">
+                       <Zap className="size-3.5 text-brand" /> +1,000 AI Messages
+                     </p>
+                     <p className="text-muted-foreground text-xs mt-0.5">KES 1,000</p>
+                   </div>
+                   <Button size="sm" variant="outline" className="h-8" onClick={() => window.alert("Add-on checkout coming soon")}>Buy</Button>
+                 </div>
+                 <div className="border border-border/60 bg-muted/10 p-4 rounded-xl flex justify-between items-center transition-colors hover:border-brand/40">
+                   <div>
+                     <p className="font-medium text-sm flex items-center gap-1.5">
+                       <PackagePlus className="size-3.5 text-blue-500" /> +50 KB Documents
+                     </p>
+                     <p className="text-muted-foreground text-xs mt-0.5">KES 500</p>
+                   </div>
+                   <Button size="sm" variant="outline" className="h-8" onClick={() => window.alert("Add-on checkout coming soon")}>Buy</Button>
+                 </div>
+               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Upgrade card */}
       {upgrade ? (
         <div className="bg-ink relative overflow-hidden rounded-2xl border border-transparent p-6 text-white shadow-elevated sm:p-8">
@@ -446,17 +519,17 @@ export default function BillingPage() {
       )}
 
       {/* M-Pesa & Card Checkout Payment Modal */}
-      <Dialog open={isMpesaModalOpen} onOpenChange={setIsMpesaModalOpen}>
-        <DialogContent className="sm:max-w-md border-border bg-card shadow-lg p-6 text-foreground">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+      <Sheet open={isMpesaModalOpen} onOpenChange={setIsMpesaModalOpen}>
+        <SheetContent className="w-full sm:max-w-md border-border bg-card shadow-lg p-6 text-foreground overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-xl font-bold flex items-center gap-2">
               <Zap className="size-5 text-brand" />
               Subscribe to {selectedPlan ? planName(selectedPlan) : "Plan"}
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               Choose your preferred payment method below to complete the subscription purchase.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
           <div className="space-y-4 mt-4 text-sm">
             {/* Option 1: M-Pesa STK Push */}
@@ -578,8 +651,8 @@ export default function BillingPage() {
               )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

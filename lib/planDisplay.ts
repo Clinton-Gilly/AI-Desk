@@ -30,6 +30,8 @@ export type PlanDisplay = {
   name: string;
   /** Monthly price in USD, display-only (Clerk Billing is the source of truth). */
   priceMonthly: number;
+  priceYearly?: number;
+  trialDays?: number;
   tagline: string;
   highlighted?: boolean;
   def: PlanDefinition;
