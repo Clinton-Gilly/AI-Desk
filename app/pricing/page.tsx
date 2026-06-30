@@ -84,11 +84,8 @@ export default function PricingPage() {
   const dbPlans = useQuery(api.plans.list);
   const planDisplayList = useMemo(() => {
     if (!dbPlans || dbPlans.length === 0) return PLAN_DISPLAY_LIST;
-    // Map DB plans to PlanDisplay shape, keeping all 3 legacy slugs ordered
-    const ordered = ["free_org", "pro", "scale"];
-    const sorted = [...dbPlans].sort(
-      (a, b) => ordered.indexOf(a.key) - ordered.indexOf(b.key)
-    );
+    // Map DB plans to PlanDisplay shape, sorting by monthly price ascending
+    const sorted = [...dbPlans].sort((a, b) => a.priceMonthly - b.priceMonthly);
     return sorted.map((p) => ({
       slug: p.key as PlanSlug,
       name: p.name,
@@ -186,7 +183,7 @@ export default function PricingPage() {
                         aria-hidden
                         className="pointer-events-none absolute -inset-px -z-10 rounded-3xl bg-gradient-to-br from-brand/20 to-brand-2/20 blur-md"
                       />
-                      <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1.5 bg-gradient-to-br from-brand to-brand-2 px-3 text-white shadow-[0_8px_24px_-8px_var(--brand)]">
+                      <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1.5 bg-gradient-to-br from-brand to-brand-2 px-3 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)]">
                         <Sparkles className="size-3" />
                         Most popular
                       </Badge>
@@ -219,21 +216,22 @@ export default function PricingPage() {
                           <span className="leading-snug">{bullet}</span>
                         </li>
                       ))}
-                      {(["website_crawl", "proactive_messages", "remove_branding"] as const)
-                        .filter((f) => !allFeatures.includes(f as Feature))
-                        .map((f) => (
+                      {(["website_crawl", "proactive_messages", "remove_branding"] as const).map((f) => {
+                        const hasFeature = allFeatures.includes(f as Feature);
+                        return (
                           <li
                             key={f}
-                            className="text-muted-foreground flex items-start gap-2.5"
+                            className={hasFeature ? "flex items-start gap-2.5" : "text-muted-foreground flex items-start gap-2.5"}
                           >
-                            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-muted">
-                              <X className="size-3" />
+                            <span className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full ${hasFeature ? "bg-brand/10 text-brand" : "bg-muted dark:bg-white/10"}`}>
+                              {hasFeature ? <Check className="size-3" /> : <X className="size-3 dark:text-white/40" />}
                             </span>
-                            <span className="leading-snug line-through">
-                              {FEATURE_LABEL[f]}
+                            <span className={`leading-snug ${hasFeature ? "" : "line-through opacity-80"}`}>
+                              {FEATURE_LABEL[f as keyof typeof FEATURE_LABEL]}
                             </span>
                           </li>
-                        ))}
+                        );
+                      })}
                     </ul>
                   </CardContent>
                   <CardFooter className="px-5 pb-6">
@@ -257,35 +255,9 @@ export default function PricingPage() {
         </p>
       </section>
 
-      {/* Feature comparison (display-only, derived from PLANS). */}
-      <ComparisonTable />
+      {/* Feature comparison (now dynamic based on DB plans). */}
+      <ComparisonTable plans={planDisplayList} />
 
-      {/* Canonical Clerk org checkout (config-driven, no plan ids needed). */}
-      <section className="mx-auto w-full max-w-6xl px-6">
-        <Reveal className="rounded-3xl border border-border bg-card p-6 shadow-card sm:p-10">
-          <div className="mx-auto mb-8 max-w-2xl text-center">
-            <p className="text-sm font-semibold tracking-tight text-brand">
-              Checkout
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-              Subscribe your{" "}
-              <span className="font-display italic font-normal">
-                organization
-              </span>
-            </h2>
-            <p className="text-muted-foreground mt-3 text-pretty">
-              Pick a plan below to start checkout. You&apos;ll need an active
-              organization — sign in and select one first.
-            </p>
-          </div>
-          {isMounted && (
-            <PricingTable
-              for="organization"
-              newSubscriptionRedirectUrl="/dashboard/billing"
-            />
-          )}
-        </Reveal>
-      </section>
 
       {/* Pricing FAQ. */}
       <PricingFaq />
@@ -318,7 +290,7 @@ function PricingHeader() {
           <Button
             asChild
             size="sm"
-            className="group rounded-full bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_6px_20px_-6px_var(--brand)] hover:opacity-95"
+            className="group rounded-full bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_6px_20px_-6px_var(--brand)] hover:opacity-95"
           >
             <Link href="/sign-up">
               Start free
@@ -344,24 +316,22 @@ const FEATURE_LABEL: Record<
 // ── Comparison table ─────────────────────────────────────────────────────────
 // Rows are derived from the canonical PLANS definitions so the table can never
 // drift from what Convex actually enforces.
-function ComparisonTable() {
-  const plans = PLAN_DISPLAY_LIST;
-
-  const limitRows: { label: string; value: (slug: PlanSlug) => string }[] = [
+function ComparisonTable({ plans }: { plans: any[] }) {
+  const limitRows: { label: string; value: (plan: any) => string }[] = [
     {
       label: "AI messages / month",
-      value: (s) => PLANS[s].limits.aiMessagesPerMonth.toLocaleString(),
+      value: (p) => p.def.limits.aiMessagesPerMonth.toLocaleString(),
     },
-    { label: "Team seats", value: (s) => String(PLANS[s].limits.seats) },
+    { label: "Team seats", value: (p) => String(p.def.limits.seats) },
     {
       label: "Knowledge base documents",
-      value: (s) => PLANS[s].limits.kbDocuments.toLocaleString(),
+      value: (p) => p.def.limits.kbDocuments.toLocaleString(),
     },
     {
       label: "Crawlable pages",
-      value: (s) =>
-        PLANS[s].limits.crawlPages > 0
-          ? PLANS[s].limits.crawlPages.toLocaleString()
+      value: (p) =>
+        p.def.limits.crawlPages > 0
+          ? p.def.limits.crawlPages.toLocaleString()
           : "—",
     },
   ];
@@ -437,7 +407,7 @@ function ComparisonTable() {
                       (p.highlighted ? " bg-brand/[0.03]" : "")
                     }
                   >
-                    {row.value(p.slug)}
+                    {row.value(p)}
                   </td>
                 ))}
               </tr>
@@ -452,7 +422,7 @@ function ComparisonTable() {
                   {row.label}
                 </td>
                 {plans.map((p) => {
-                  const has = PLANS[p.slug].features.includes(row.feature);
+                  const has = p.def?.features?.includes(row.feature) || false;
                   return (
                     <td
                       key={p.slug}
@@ -562,7 +532,7 @@ function PricingFaq() {
 
       {/* ── Final CTA (brand gradient band, mirrors the landing page) ──────── */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-24 sm:pb-32">
-        <Reveal className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand via-brand to-brand-2 px-8 py-16 text-center text-white sm:px-16 sm:py-20">
+        <Reveal className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand via-brand to-brand-2 px-8 py-16 text-center text-[var(--brand-text)] sm:px-16 sm:py-20">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 opacity-40"
@@ -579,7 +549,7 @@ function PricingFaq() {
             Ready to get{" "}
             <span className="font-display italic font-normal">started?</span>
           </h3>
-          <p className="relative mx-auto mt-4 max-w-xl text-pretty text-base text-white/85 sm:text-lg">
+          <p className="relative mx-auto mt-4 max-w-xl text-pretty text-base opacity-85 sm:text-lg">
             Launch your AI support desk in minutes — free to start, no credit
             card required.
           </p>
@@ -587,7 +557,7 @@ function PricingFaq() {
             <Button
               asChild
               size="lg"
-              className="h-12 w-full rounded-full bg-white px-7 text-base font-medium text-brand hover:bg-white/90 sm:w-auto"
+              className="h-12 w-full rounded-full bg-[var(--brand-text)] px-7 text-base font-medium text-brand hover:opacity-90 sm:w-auto"
             >
               <Link href="/sign-up">Start free</Link>
             </Button>
@@ -595,7 +565,7 @@ function PricingFaq() {
               asChild
               size="lg"
               variant="outline"
-              className="h-12 w-full rounded-full border-white/30 bg-transparent px-7 text-base text-white hover:bg-white/10 hover:text-white sm:w-auto"
+              className="h-12 w-full rounded-full border-[var(--brand-text)] bg-transparent px-7 text-base text-[var(--brand-text)] hover:bg-[var(--brand-text)] hover:text-brand opacity-85 sm:w-auto"
             >
               <Link href="/dashboard/billing">Go to billing</Link>
             </Button>
@@ -729,7 +699,7 @@ function PlanCta({
   };
 
   const variantClass = highlighted
-    ? "w-full rounded-full bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 cursor-pointer"
+    ? "w-full rounded-full bg-gradient-to-br from-brand to-brand-2 text-[var(--brand-text)] shadow-[0_8px_24px_-8px_var(--brand)] hover:opacity-95 cursor-pointer"
     : "w-full rounded-full cursor-pointer";
 
   return (

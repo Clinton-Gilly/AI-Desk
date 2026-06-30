@@ -206,12 +206,15 @@ export default function BillingPage() {
     );
   }
 
-  // Prefer the live Clerk plan when it differs from the (possibly lagging)
-  // mirror — checkout updates session claims before the webhook writes.
-  const livePlanSlug =
-    (["scale", "pro", "free_org"] as const).find((slug) =>
-      has?.({ plan: slug }),
-    ) ?? overview.planSlug;
+  // Prefer the live Clerk plan for PAID plans (pro/scale) when it differs from
+  // the (possibly lagging) mirror — Clerk checkout updates session claims before
+  // the webhook writes. For free_org we do NOT blindly trust has() because
+  // M-Pesa payments update the DB directly without touching Clerk session claims,
+  // so has({ plan: "free_org" }) stays true even after a paid upgrade.
+  const clerkPaidPlan = (["scale", "pro"] as const).find((slug) =>
+    has?.({ plan: slug }),
+  );
+  const livePlanSlug = clerkPaidPlan ?? overview.planSlug;
 
   const display = PLAN_DISPLAY[livePlanSlug as keyof typeof PLAN_DISPLAY];
   const isFree = livePlanSlug === "free_org";
@@ -539,7 +542,7 @@ export default function BillingPage() {
                   <span className="font-bold text-foreground text-sm">Option A: Pay with M-Pesa</span>
                   <MpesaLogo />
                 </div>
-                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px] font-bold">
+                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20 text-[10px] font-bold">
                   Active
                 </Badge>
               </div>
@@ -596,9 +599,9 @@ export default function BillingPage() {
               )}
 
               {pollingStatus === "completed" && (
-                <div className="mt-4 p-3 rounded bg-emerald-500/5 border border-emerald-500/20 text-center space-y-1.5">
-                  <Check className="size-6 text-emerald-500 mx-auto bg-emerald-500/10 rounded-full p-1" />
-                  <p className="text-xs font-bold text-emerald-600">Payment Confirmed!</p>
+                <div className="mt-4 p-3 rounded bg-emerald-500/10 border border-emerald-500/20 text-center space-y-1.5">
+                  <Check className="size-6 text-emerald-500 mx-auto bg-emerald-500/20 rounded-full p-1" />
+                  <p className="text-xs font-bold text-emerald-600 dark:text-emerald-300">Payment Confirmed!</p>
                   <p className="text-[11px] text-muted-foreground">
                     Receipt: {pendingTx?.mpesaReceiptNumber ?? "N/A"}. Your plan has been upgraded successfully.
                   </p>
@@ -606,9 +609,9 @@ export default function BillingPage() {
               )}
 
               {pollingStatus === "failed" && (
-                <div className="mt-4 p-3 rounded bg-rose-500/5 border border-rose-500/20 text-center space-y-2">
+                <div className="mt-4 p-3 rounded bg-rose-500/10 border border-rose-500/20 text-center space-y-2">
                   <ShieldAlert className="size-5 text-rose-500 mx-auto" />
-                  <p className="text-xs font-bold text-rose-600">STK Push Payment Failed</p>
+                  <p className="text-xs font-bold text-rose-600 dark:text-rose-300">STK Push Payment Failed</p>
                   <p className="text-[11px] text-muted-foreground leading-normal">{txError}</p>
                   <Button
                     size="sm"
@@ -662,7 +665,7 @@ function StatusBadge({ status, active }: { status: string; active: boolean }) {
     return (
       <Badge
         variant="outline"
-        className="border-emerald-500/30 bg-emerald-500/10 font-normal text-emerald-600"
+        className="border-emerald-500/30 bg-emerald-500/10 font-normal text-emerald-600 dark:text-emerald-300"
       >
         <span className="mr-1.5 size-1.5 rounded-full bg-emerald-500" />
         {statusLabel(status)}
