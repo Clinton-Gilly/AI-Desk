@@ -4,6 +4,7 @@ import { ConvexError } from "convex/values";
 import { requireOrgMember } from "./lib/auth";
 import { rateLimiter, rlKey } from "./lib/ratelimit";
 import { internal } from "./_generated/api";
+import { enqueueOutbound } from "./dispatcher";
 
 // Debounce window: coalesces rapid successive visitor messages into a single
 // agent run (the scheduled job for an earlier message is cancelled when a newer
@@ -37,6 +38,16 @@ const messageDoc = v.object({
   isAi: v.optional(v.boolean()),
   authorClerkUserId: v.optional(v.string()),
   pending: v.optional(v.boolean()),
+  waMessageId: v.optional(v.string()),
+  deliveryStatus: v.optional(
+    v.union(
+      v.literal("queued"),
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("read"),
+      v.literal("failed"),
+    )
+  ),
   citations: v.optional(
     v.array(
       v.object({
@@ -191,7 +202,7 @@ export const sendFromAgent = mutation({
       throw new ConvexError({ code: "EMPTY_BODY" });
     }
 
-    await ctx.db.insert("messages", {
+    const messageId = await ctx.db.insert("messages", {
       conversationId,
       author: "agent",
       body: trimmed,
@@ -199,6 +210,19 @@ export const sendFromAgent = mutation({
       authorClerkUserId: identity.subject,
     });
     await ctx.db.patch(conversationId, { lastMessageAt: Date.now() });
+
+    // ── Omnichannel: dispatch reply to external channel if applicable ───────
+    // Website conversations are skipped inside enqueueOutbound (pull-based).
+    if (convo.channelId && convo.provider && convo.provider !== "website") {
+      await enqueueOutbound(ctx, {
+        conversationId,
+        messageId,
+        workspaceId: convo.workspaceId,
+        channelId: convo.channelId,
+        provider: convo.provider,
+      });
+    }
+
     return null;
   },
 });

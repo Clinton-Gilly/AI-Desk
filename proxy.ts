@@ -14,11 +14,16 @@ const isProtectedRoute = createRouteMatcher([
   "/admin(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+export default clerkMiddleware(
+  async (auth, req) => {
+    if (isProtectedRoute(req)) {
+      await auth.protect();
+    }
+  },
+  {
+    clockSkewInMs: process.env.NODE_ENV === "development" ? 1800000 : 600000,
   }
-});
+);
 
 export const config = {
   matcher: [

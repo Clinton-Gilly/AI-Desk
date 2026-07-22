@@ -275,7 +275,7 @@ export function ChatTab({
           placeholder="Type your message…"
           aria-label="Type your message"
           disabled={!ready}
-          className="max-h-28 min-h-[42px] flex-1 resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm leading-relaxed outline-none transition placeholder:text-neutral-400 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-[var(--wc-button)]/30 disabled:opacity-50"
+          className="max-h-28 min-h-[42px] flex-1 resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-900 leading-relaxed outline-none transition placeholder:text-neutral-400 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-[var(--wc-button)]/30 disabled:opacity-50"
         />
         <button
           type="submit"

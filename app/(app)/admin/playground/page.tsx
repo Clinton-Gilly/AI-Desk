@@ -69,7 +69,7 @@ export default function AdminPlaygroundPage() {
       let responseContent = `Based on the crawled help articles for ${wsName}, yes, we support that request. We offer automated setup options and detailed API documentation for all verified members. Please consult the KB settings in your console dashboard for further steps.`;
 
       if (simulatedText.includes("price") || simulatedText.includes("cost") || simulatedText.includes("bill")) {
-        responseContent = `According to the grounding documents for ${wsName}, our plans range from a Free tier ($0/mo with 100 messages) to a Pro plan ($49/mo with 1,000 messages) and a Scale plan ($199/mo with 10,000 messages). Let me know if you would like me to generate an upgrade link!`;
+        responseContent = `According to the grounding documents for ${wsName}, our plans range from a Free tier (KSh 0/mo with 100 messages) to a Pro plan (KSh 6,500/mo with 1,000 messages) and a Scale plan (KSh 26,000/mo with 10,000 messages). Let me know if you would like me to generate an upgrade link!`;
       } else if (simulatedText.includes("integrate") || simulatedText.includes("install") || simulatedText.includes("setup")) {
         responseContent = `Our installation guidelines indicate that you can add MyChat to your website by pasting our custom script tag directly before the closing </body> tag of your HTML. Alternatively, we support standard Next.js npm packages.`;
       }
@@ -311,7 +311,7 @@ export default function AdminPlaygroundPage() {
                     </div>
                     <div className="space-y-1">
                       <span className="text-muted-foreground text-[11px] block">Lowest Cost</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400 block">Gemini 1.5 Pro ($0.00019)</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 block">Gemini 1.5 Pro (KSh 0.03)</span>
                     </div>
                     <div className="space-y-1">
                       <span className="text-muted-foreground text-[11px] block">Total Prompt Tokens</span>

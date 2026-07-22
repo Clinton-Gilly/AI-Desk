@@ -142,7 +142,7 @@ export function LeadCaptureForm({
                         ? "given-name"
                         : "family-name"
                 }
-                className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-neutral-400 focus:border-transparent focus:ring-2 focus:ring-[var(--wc-button)]/30"
+                className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-transparent focus:ring-2 focus:ring-[var(--wc-button)]/30"
               />
             </div>
           ))}

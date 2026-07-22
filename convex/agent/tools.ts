@@ -244,7 +244,7 @@ export function buildSupportTools(deps: SupportToolDeps): ToolSet {
       // Surface these as citations on the final message too.
       if (articles.length > 0) {
         deps.collectCitations(
-          articles.map((a) => ({
+          articles.map((a: any) => ({
             title: a.title,
             url: `/articles/${a.slug}`,
           })),
@@ -252,7 +252,7 @@ export function buildSupportTools(deps: SupportToolDeps): ToolSet {
       }
       return {
         count: articles.length,
-        articles: articles.map((a) => ({
+        articles: articles.map((a: any) => ({
           title: a.title,
           slug: a.slug,
           excerpt: a.excerpt,

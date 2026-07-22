@@ -438,4 +438,283 @@ http.route({
   }),
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// META (WhatsApp) WEBHOOK
+//
+//   GET  https://<convex-deployment>.convex.site/meta-webhook   ← verification
+//   POST https://<convex-deployment>.convex.site/meta-webhook   ← events
+//
+// Register this URL in the Meta App Dashboard → WhatsApp → Configuration.
+// Set the Verify Token to the value of META_WEBHOOK_VERIFY_TOKEN env var.
+// Subscribe to: messages, messaging_postbacks, message_deliveries
+// ─────────────────────────────────────────────────────────────────────────────
+
+http.route({
+  path: "/meta-webhook",
+  method: "GET",
+  handler: httpAction(async (_ctx, request) => {
+    const url = new URL(request.url);
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+
+    const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+    if (!verifyToken) {
+      console.error("[meta-webhook] META_WEBHOOK_VERIFY_TOKEN not set");
+      return new Response("Server misconfigured", { status: 500 });
+    }
+
+    if (mode === "subscribe" && token === verifyToken) {
+      console.log("[meta-webhook] Webhook verified successfully");
+      return new Response(challenge, { status: 200 });
+    }
+
+    console.warn("[meta-webhook] Verification failed — token mismatch");
+    return new Response("Verification failed", { status: 403 });
+  }),
+});
+
+http.route({
+  path: "/meta-webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const rawBody = await request.text();
+    const receivedAt = Date.now();
+
+    // ── HMAC signature verification (Meta X-Hub-Signature-256) ─────────────
+    // Must verify BEFORE parsing to prevent injection attacks.
+    const appSecret = process.env.META_APP_SECRET;
+    if (appSecret) {
+      const signature = request.headers.get("x-hub-signature-256") ?? "";
+      if (signature) {
+        // Verify using Web Crypto (V8 compatible).
+        try {
+          const encoder = new TextEncoder();
+          const key = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(appSecret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"],
+          );
+          const sigBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
+          const hashHex = Array.from(new Uint8Array(sigBuffer))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+          const expected = `sha256=${hashHex}`;
+
+          // Timing-safe compare.
+          let mismatch = signature.length !== expected.length ? 1 : 0;
+          for (let i = 0; i < Math.min(signature.length, expected.length); i++) {
+            mismatch |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+          }
+          if (mismatch !== 0) {
+            console.warn("[meta-webhook] HMAC signature mismatch — rejecting");
+            return new Response("Forbidden", { status: 403 });
+          }
+        } catch (e) {
+          console.error("[meta-webhook] HMAC verification error:", e);
+          return new Response("Forbidden", { status: 403 });
+        }
+      }
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    try {
+      if (body.object !== "whatsapp_business_account" || !Array.isArray(body.entry)) {
+        return new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      for (const entry of body.entry as Record<string, unknown>[]) {
+        for (const change of (entry.changes as Record<string, unknown>[]) ?? []) {
+          const value = change.value as Record<string, unknown>;
+          if (!value) continue;
+
+          const phoneNumberId = (value.metadata as Record<string, string>)?.phone_number_id;
+          if (!phoneNumberId) continue;
+
+          // ── Status updates (delivery receipts) ────────────────────────────
+          const statuses = value.statuses as Record<string, unknown>[] | undefined;
+          if (statuses) {
+            for (const st of statuses) {
+              const wamid = st.id as string;
+              const status = st.status as "sent" | "delivered" | "read" | "failed";
+              if (!wamid || !["sent", "delivered", "read", "failed"].includes(status)) continue;
+
+              const errorMsg = (st.errors as { message?: string }[] | undefined)?.[0]?.message;
+              await ctx.runMutation(internal.whatsapp.handleStatusUpdate, {
+                providerMessageId: wamid,
+                status,
+                phoneNumberId,
+                errorMessage: errorMsg,
+              });
+            }
+          }
+
+          // ── Inbound messages ──────────────────────────────────────────────
+          const messages = value.messages as Record<string, unknown>[] | undefined;
+          if (!messages) continue;
+
+          const contacts = value.contacts as { wa_id: string; profile?: { name?: string } }[] | undefined;
+
+          for (const msg of messages) {
+            const fromNumber = msg.from as string;
+            const msgType = msg.type as string;
+            const providerMessageId = msg.id as string;
+
+            if (!fromNumber || !msgType || !providerMessageId) continue;
+
+            // Resolve sender name from contacts array.
+            const waContact = contacts?.find((c) => c.wa_id === fromNumber);
+            const senderName = waContact?.profile?.name ?? fromNumber;
+
+            // ── Derive body + media fields per message type ────────────────
+            let body_ = "";
+            let mediaId: string | undefined;
+            let mediaMimeType: string | undefined;
+            let mediaCaption: string | undefined;
+            let mediaFileName: string | undefined;
+            let mediaDuration: number | undefined;
+
+            switch (msgType) {
+              case "text": {
+                body_ = (msg.text as { body?: string })?.body ?? "";
+                break;
+              }
+              case "image": {
+                const m = msg.image as { id?: string; mime_type?: string; caption?: string };
+                mediaId = m?.id;
+                mediaMimeType = m?.mime_type;
+                mediaCaption = m?.caption;
+                body_ = mediaCaption ? `📷 ${mediaCaption}` : "📷 Image";
+                break;
+              }
+              case "video": {
+                const m = msg.video as { id?: string; mime_type?: string; caption?: string };
+                mediaId = m?.id;
+                mediaMimeType = m?.mime_type;
+                mediaCaption = m?.caption;
+                body_ = mediaCaption ? `🎥 ${mediaCaption}` : "🎥 Video";
+                break;
+              }
+              case "audio": {
+                const m = msg.audio as { id?: string; mime_type?: string };
+                mediaId = m?.id;
+                mediaMimeType = m?.mime_type;
+                body_ = "🎵 Audio message";
+                break;
+              }
+              case "voice": {
+                const m = msg.voice as { id?: string; mime_type?: string };
+                mediaId = m?.id;
+                mediaMimeType = m?.mime_type;
+                body_ = "🎤 Voice message";
+                break;
+              }
+              case "document": {
+                const m = msg.document as {
+                  id?: string;
+                  mime_type?: string;
+                  filename?: string;
+                  caption?: string;
+                };
+                mediaId = m?.id;
+                mediaMimeType = m?.mime_type;
+                mediaCaption = m?.caption;
+                mediaFileName = m?.filename;
+                body_ = mediaFileName ? `📄 ${mediaFileName}` : "📄 Document";
+                break;
+              }
+              case "sticker": {
+                const m = msg.sticker as { id?: string; mime_type?: string };
+                mediaId = m?.id;
+                mediaMimeType = m?.mime_type;
+                body_ = "🎭 Sticker";
+                break;
+              }
+              case "location": {
+                const l = msg.location as {
+                  latitude?: number;
+                  longitude?: number;
+                  name?: string;
+                  address?: string;
+                };
+                body_ = l?.name
+                  ? `📍 ${l.name}${l.address ? `, ${l.address}` : ""}`
+                  : `📍 Location (${l?.latitude}, ${l?.longitude})`;
+                break;
+              }
+              case "contacts": {
+                const cts = msg.contacts as { name?: { formatted_name?: string } }[] | undefined;
+                const name = cts?.[0]?.name?.formatted_name ?? "Contact";
+                body_ = `👤 Shared contact: ${name}`;
+                break;
+              }
+              case "reaction": {
+                const r = msg.reaction as { emoji?: string };
+                body_ = r?.emoji ? `Reacted with ${r.emoji}` : "Reaction";
+                break;
+              }
+              case "button": {
+                body_ = (msg.button as { text?: string })?.text ?? "Button reply";
+                break;
+              }
+              case "interactive": {
+                const i = msg.interactive as {
+                  button_reply?: { title?: string };
+                  list_reply?: { title?: string };
+                };
+                body_ = i?.button_reply?.title ?? i?.list_reply?.title ?? "Interactive reply";
+                break;
+              }
+              default:
+                body_ = `[Unsupported message type: ${msgType}]`;
+            }
+
+            // Truncate payload for logging.
+            const rawPayload = JSON.stringify(msg).slice(0, 8192);
+
+            await ctx.runMutation(internal.whatsapp.handleIncomingMessage, {
+              phoneNumberId,
+              fromNumber,
+              senderName,
+              messageType: msgType,
+              body: body_,
+              providerMessageId,
+              mediaId,
+              mediaMimeType,
+              mediaCaption,
+              mediaFileName,
+              mediaDuration,
+              rawPayload,
+            });
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      console.error("[meta-webhook] Error processing event:", err);
+      // Still return 200 to prevent Meta from retrying (we've logged the error).
+      return new Response(JSON.stringify({ status: "error", error: String(err) }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 export default http;
+

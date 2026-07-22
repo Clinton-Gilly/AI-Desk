@@ -125,7 +125,7 @@ export function HelpdeskTab({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search for help…"
             aria-label="Search the help center"
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2.5 pl-10 pr-3 text-sm outline-none transition placeholder:text-neutral-400 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-[var(--wc-button)]/30"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2.5 pl-10 pr-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-[var(--wc-button)]/30"
           />
         </div>
       </div>

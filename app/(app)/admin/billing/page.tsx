@@ -109,6 +109,8 @@ const DEFAULT_FORM = {
   },
 };
 
+const formatKes = (amount: number) => `KSh ${Math.round(amount).toLocaleString("en-KE")}`;
+
 // ─── Plan Form Dialog ─────────────────────────────────────────────────────────
 function PlanFormDialog({
   open,
@@ -234,7 +236,7 @@ function PlanFormDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="plan-price">Price / Month (KES)</Label>
+              <Label htmlFor="plan-price">Price / Month (KSh)</Label>
               <Input
                 id="plan-price"
                 type="number"
@@ -244,7 +246,7 @@ function PlanFormDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="plan-price-yearly">Price / Year (KES)</Label>
+              <Label htmlFor="plan-price-yearly">Price / Year (KSh)</Label>
               <Input
                 id="plan-price-yearly"
                 type="number"
@@ -435,7 +437,7 @@ function PlanCard({
           <p className="mt-0.5 text-xs text-muted-foreground truncate">{plan.tagline}</p>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl font-extrabold text-foreground">
-              KES {plan.priceMonthly.toLocaleString()}
+              {formatKes(plan.priceMonthly)}
             </span>
             <span className="text-xs text-muted-foreground">/mo</span>
           </div>
@@ -675,7 +677,7 @@ export default function AdminBillingPage() {
             <div className="text-3xl font-bold tracking-tight text-foreground">
               {stats.subscriptionStats.free_org}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Workspaces (KES 0 / mo)</p>
+            <p className="mt-1 text-xs text-muted-foreground">Workspaces ({formatKes(0)} / mo)</p>
           </CardContent>
         </Card>
 
@@ -693,11 +695,11 @@ export default function AdminBillingPage() {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Pro workspaces · MRR: KES{" "}
-              {(
+              Pro workspaces · MRR: {" "}
+              {formatKes(
                 activeProCount *
                 (plans?.find((p) => p.key === "pro")?.priceMonthly ?? 6500)
-              ).toLocaleString()}
+              )}
             </p>
           </CardContent>
         </Card>
@@ -716,11 +718,11 @@ export default function AdminBillingPage() {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Scale workspaces · MRR: KES{" "}
-              {(
+              Scale workspaces · MRR: {" "}
+              {formatKes(
                 activeScaleCount *
                 (plans?.find((p) => p.key === "scale")?.priceMonthly ?? 26000)
-              ).toLocaleString()}
+              )}
             </p>
           </CardContent>
         </Card>
@@ -760,7 +762,7 @@ export default function AdminBillingPage() {
                         />
                         {/* Tooltip */}
                         <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-foreground text-background text-[10px] py-1 px-2 rounded whitespace-nowrap pointer-events-none">
-                          KES {data.revenue.toLocaleString()}
+                          {formatKes(data.revenue)}
                         </div>
                       </div>
                       <span className="text-[10px] text-muted-foreground uppercase">{data.month}</span>
@@ -1072,7 +1074,7 @@ export default function AdminBillingPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-bold text-foreground whitespace-nowrap">
-                          KES {(planDef?.priceMonthly ?? 0).toLocaleString()}/mo
+                          {formatKes(planDef?.priceMonthly ?? 0)}/mo
                         </TableCell>
                         <TableCell className="text-center font-medium text-muted-foreground">
                           {ws.membersCount}
@@ -1152,7 +1154,7 @@ export default function AdminBillingPage() {
                         {tx.phoneNumber}
                       </TableCell>
                       <TableCell className="font-bold text-foreground whitespace-nowrap">
-                        KES {tx.amount.toLocaleString()}
+                        {formatKes(tx.amount)}
                       </TableCell>
                       <TableCell>
                         <Badge

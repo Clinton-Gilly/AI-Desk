@@ -54,6 +54,8 @@ const PLAN_CHECKOUT_IDS: Record<"pro" | "scale", string | undefined> = {
   scale: process.env.NEXT_PUBLIC_CLERK_PLAN_SCALE_ID,
 };
 
+const formatKes = (amount: number) => `KSh ${Math.round(amount).toLocaleString("en-KE")}`;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Billing dashboard (Phase 2). Admin-gated:
 //   - the Convex `billingDashboard.getBillingOverview` query throws FORBIDDEN
@@ -319,7 +321,7 @@ export default function BillingPage() {
           </div>
           <div className="text-right">
             <p className="text-2xl font-semibold tracking-tight tabular-nums">
-              {display?.priceMonthly === 0 ? "Free" : `$${display?.priceMonthly}`}
+              {display?.priceMonthly === 0 ? "Free" : formatKes(display?.priceMonthly ?? 0)}
             </p>
             <p className="text-muted-foreground text-xs">
               {display?.priceMonthly === 0 ? "forever" : "per month"}
@@ -447,7 +449,7 @@ export default function BillingPage() {
                      <p className="font-medium text-sm flex items-center gap-1.5">
                        <Zap className="size-3.5 text-brand" /> +1,000 AI Messages
                      </p>
-                     <p className="text-muted-foreground text-xs mt-0.5">KES 1,000</p>
+                     <p className="text-muted-foreground text-xs mt-0.5">{formatKes(1000)}</p>
                    </div>
                    <Button size="sm" variant="outline" className="h-8" onClick={() => window.alert("Add-on checkout coming soon")}>Buy</Button>
                  </div>
@@ -456,7 +458,7 @@ export default function BillingPage() {
                      <p className="font-medium text-sm flex items-center gap-1.5">
                        <PackagePlus className="size-3.5 text-blue-500" /> +50 KB Documents
                      </p>
-                     <p className="text-muted-foreground text-xs mt-0.5">KES 500</p>
+                     <p className="text-muted-foreground text-xs mt-0.5">{formatKes(500)}</p>
                    </div>
                    <Button size="sm" variant="outline" className="h-8" onClick={() => window.alert("Add-on checkout coming soon")}>Buy</Button>
                  </div>
@@ -579,7 +581,9 @@ export default function BillingPage() {
                         Initiating...
                       </>
                     ) : (
-                      <>Send STK Push (KES {selectedPlan === "pro" ? "6,500" : "26,000"})</>
+                      <>
+                        Send STK Push ({formatKes(selectedPlan === "pro" ? 6500 : 26000)})
+                      </>
                     )}
                   </Button>
                 </div>

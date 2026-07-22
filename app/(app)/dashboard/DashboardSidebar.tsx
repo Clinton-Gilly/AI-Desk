@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
+import { OrganizationSwitcher, UserButton, ClerkLoaded, ClerkLoading } from "@clerk/nextjs";
 import { useConvexAuth, useQuery } from "convex/react";
 import {
   Inbox,
@@ -13,6 +13,7 @@ import {
   CreditCard,
   Settings,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import {
   Sidebar,
@@ -43,6 +44,7 @@ const NAV: NavItem[] = [
   { title: "Inbox", href: "/dashboard", icon: Inbox, exact: true },
   { title: "Leads", href: "/dashboard/leads", icon: Users },
   { title: "Knowledge", href: "/dashboard/knowledge", icon: BookOpen },
+  { title: "Channels", href: "/dashboard/channels", icon: Globe },
   { title: "Customizer", href: "/dashboard/customizer", icon: Palette },
   { title: "Team", href: "/dashboard/team", icon: UsersRound },
   { title: "Billing", href: "/dashboard/billing", icon: CreditCard },
@@ -110,19 +112,24 @@ export function DashboardSidebar() {
           {/* hidePersonal: B2B — all work happens inside an org. Switching/
               creating an org sets the active org, which emits the org claims
               into the Convex JWT. The OrgGuard re-resolves reactively. */}
-          <OrganizationSwitcher
-            hidePersonal
-            afterSelectOrganizationUrl="/dashboard"
-            afterCreateOrganizationUrl="/dashboard"
-            afterLeaveOrganizationUrl="/onboarding"
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                organizationSwitcherTrigger:
-                  "w-full justify-start rounded-lg border border-sidebar-border bg-sidebar px-2.5 py-2 hover:bg-sidebar-accent",
-              },
-            }}
-          />
+          <ClerkLoading>
+            <div className="h-9 w-full animate-pulse rounded-lg bg-sidebar-accent/50" />
+          </ClerkLoading>
+          <ClerkLoaded>
+            <OrganizationSwitcher
+              hidePersonal
+              afterSelectOrganizationUrl="/dashboard"
+              afterCreateOrganizationUrl="/dashboard"
+              afterLeaveOrganizationUrl="/onboarding"
+              appearance={{
+                elements: {
+                  rootBox: "w-full",
+                  organizationSwitcherTrigger:
+                    "w-full justify-start rounded-lg border border-sidebar-border bg-sidebar px-2.5 py-2 hover:bg-sidebar-accent",
+                },
+              }}
+            />
+          </ClerkLoaded>
         </div>
       </SidebarHeader>
 
@@ -213,7 +220,12 @@ export function DashboardSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <div className="flex items-center justify-between gap-2.5 rounded-lg px-1.5 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <div className="flex items-center gap-2.5">
-            <UserButton appearance={{ elements: { rootBox: "shrink-0" } }} />
+            <ClerkLoading>
+              <div className="size-8 shrink-0 animate-pulse rounded-full bg-sidebar-accent/50" />
+            </ClerkLoading>
+            <ClerkLoaded>
+              <UserButton appearance={{ elements: { rootBox: "shrink-0" } }} />
+            </ClerkLoaded>
             <span className="truncate text-sm font-medium text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">
               Account
             </span>

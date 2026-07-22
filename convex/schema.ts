@@ -60,6 +60,27 @@ export default defineSchema({
     pendingAgentJobId: v.optional(v.id("_scheduled_functions")), // debounce/idempotency lock (opportunistic cancel only)
     agentRunEpoch: v.optional(v.number()), // bumped on takeover/new-msg to abort in-flight runs
     threadId: v.optional(v.string()), // bridge to @convex-dev/agent thread (set in Phase 4)
+    // ── OMNICHANNEL (additive, optional, fully backward-compatible) ─────────
+    // provider = which channel created this conversation. Legacy widget rows
+    // have provider=undefined; treat as "website" everywhere in code.
+    provider: v.optional(v.union(
+      v.literal("website"),
+      v.literal("whatsapp"),
+      v.literal("instagram"),
+      v.literal("messenger"),
+      v.literal("telegram"),
+      v.literal("email"),
+    )),
+    channelId: v.optional(v.id("channels")),     // → channels._id
+    contactId: v.optional(v.id("contacts")),     // → contacts._id (null for anon widget)
+    // Richer state machine: superset of mode+status for automation/analytics.
+    conversationState: v.optional(v.union(
+      v.literal("ai"),              // AI is handling
+      v.literal("waiting_agent"),   // AI escalated, awaiting human pickup
+      v.literal("human"),           // human agent owns it
+      v.literal("waiting_customer"),// agent replied, awaiting customer
+      v.literal("resolved"),        // resolved/closed
+    )),
   })
     .index("by_workspace", ["workspaceId", "lastMessageAt"])
     .index("by_workspace_visitor", ["workspaceId", "visitorId"])
@@ -69,7 +90,9 @@ export default defineSchema({
       "assignedClerkUserId",
       "lastMessageAt",
     ])
-    .index("by_workspace_mode", ["workspaceId", "mode", "lastMessageAt"]),
+    .index("by_workspace_mode", ["workspaceId", "mode", "lastMessageAt"])
+    .index("by_workspace_provider", ["workspaceId", "provider", "lastMessageAt"])
+    .index("by_channel", ["channelId", "lastMessageAt"]),
 
   // Tenant-facing transcript. The live widget reads this via `messages.list` —
   // KEEP intact. New fields are additive + optional.
@@ -104,7 +127,18 @@ export default defineSchema({
         url: v.string(),
       }),
     ),
-  }).index("by_conversation", ["conversationId"]),
+    // ── DELIVERY TRACKING (WhatsApp and future channels) ───────────────────
+    waMessageId: v.optional(v.string()),       // provider message id (for status callbacks)
+    deliveryStatus: v.optional(v.union(
+      v.literal("queued"),
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("read"),
+      v.literal("failed"),
+    )),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_wa_message_id", ["waMessageId"]),
 
   // ── LEADS ──────────────────────────────────────────────────────────────────
   leads: defineTable({
@@ -367,4 +401,210 @@ export default defineSchema({
   })
     .index("by_checkout_id", ["checkoutRequestID"])
     .index("by_workspace", ["workspaceId", "createdAt"]),
+
+  // ── WHATSAPP CHANNEL (Meta Embedded Signup) ────────────────────────────────
+  // One row per workspace. Created/updated when the owner completes the Meta
+  // Embedded Signup flow. All credential fields are optional so the row can be
+  // created in a "pending" state while the code→token exchange is in flight.
+  whatsappChannels: defineTable({
+    workspaceId: v.id("workspaces"),
+    clerkOrgId: v.string(),
+    // Meta identifiers
+    wabaId: v.optional(v.string()),           // WhatsApp Business Account ID
+    phoneNumberId: v.optional(v.string()),     // Phone Number object ID
+    phoneNumber: v.optional(v.string()),       // Human-readable display number, e.g. "+1 555 123 4567"
+    displayName: v.optional(v.string()),       // Business display name from Meta
+    // Credentials
+    accessToken: v.optional(v.string()),       // System-user / page access token
+    // Lifecycle
+    status: v.union(
+      v.literal("pending"),     // code received, token exchange in-flight
+      v.literal("connected"),   // credentials saved and active
+      v.literal("error"),       // exchange failed
+      v.literal("disconnected"),// user manually disconnected
+    ),
+    errorMessage: v.optional(v.string()),
+    connectedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_org", ["clerkOrgId"])
+    .index("by_phone_number_id", ["phoneNumberId"]),
+
+  // ── OMNICHANNEL: CHANNEL REGISTRY ─────────────────────────────────────────
+  // Generic channel entity. One org can have multiple channels of different
+  // providers ("WhatsApp Sales", "WhatsApp Support", "Instagram DMs", ...).
+  // Provider-specific credentials live in companion tables (whatsappConnections).
+  channels: defineTable({
+    workspaceId: v.id("workspaces"),
+    clerkOrgId: v.string(),
+    provider: v.union(
+      v.literal("website"),
+      v.literal("whatsapp"),
+      v.literal("instagram"),
+      v.literal("messenger"),
+      v.literal("telegram"),
+      v.literal("email"),
+    ),
+    displayName: v.string(),       // e.g. "WhatsApp Sales", "Instagram DMs"
+    status: v.union(
+      v.literal("active"),
+      v.literal("inactive"),
+      v.literal("error"),
+      v.literal("pending"),
+    ),
+    connectedAt: v.optional(v.number()),
+    lastActivityAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_org", ["clerkOrgId"])
+    .index("by_workspace_provider", ["workspaceId", "provider"]),
+
+  // WhatsApp-specific credentials for a channel (keyed to channels._id).
+  // Separated so credentials never leak through generic channel queries.
+  whatsappConnections: defineTable({
+    channelId: v.id("channels"),
+    workspaceId: v.id("workspaces"),     // denormalized for index queries
+    // Meta identifiers
+    businessId: v.optional(v.string()),
+    wabaId: v.optional(v.string()),
+    phoneNumberId: v.optional(v.string()),
+    phoneNumber: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    // Credentials (accessToken excluded from all client-facing queries)
+    accessToken: v.optional(v.string()),
+    tokenExpiresAt: v.optional(v.number()),
+    // Lifecycle
+    status: v.union(
+      v.literal("pending"),
+      v.literal("connected"),
+      v.literal("error"),
+      v.literal("disconnected"),
+    ),
+    errorMessage: v.optional(v.string()),
+    connectedAt: v.optional(v.number()),
+    lastSync: v.optional(v.number()),
+    lastWebhookAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_channel", ["channelId"])
+    .index("by_workspace", ["workspaceId"])
+    .index("by_phone_number_id", ["phoneNumberId"]),  // O(1) webhook lookup
+
+  // ── CONTACTS + IDENTITIES ─────────────────────────────────────────────────
+  // contacts: canonical person record — distinct from leads (which are
+  // email-captured). Contacts are channel-identified provider users.
+  contacts: defineTable({
+    workspaceId: v.id("workspaces"),
+    displayName: v.string(),
+    avatarUrl: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    firstSeenAt: v.number(),
+    lastSeenAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId", "lastSeenAt"]),
+
+  // contactIdentities: maps one Contact to many provider identities.
+  // Example: John → WhatsApp +254..., Instagram @john, email john@gmail.com
+  contactIdentities: defineTable({
+    contactId: v.id("contacts"),
+    workspaceId: v.id("workspaces"),   // denormalized for indexed queries
+    provider: v.union(
+      v.literal("website"),
+      v.literal("whatsapp"),
+      v.literal("instagram"),
+      v.literal("messenger"),
+      v.literal("telegram"),
+      v.literal("email"),
+    ),
+    providerUserId: v.string(),        // phone, Instagram ID, email, visitorId, etc.
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    lastSeenAt: v.number(),
+  })
+    .index("by_workspace_provider_user", ["workspaceId", "provider", "providerUserId"])
+    .index("by_contact", ["contactId"]),
+
+  // ── ATTACHMENTS ─────────────────────────────────────────────────────────────
+  // One message → many attachments. Avoids nullable field sprawl on messages.
+  attachments: defineTable({
+    messageId: v.id("messages"),
+    conversationId: v.id("conversations"),   // denormalized for efficient queries
+    workspaceId: v.id("workspaces"),
+    provider: v.string(),
+    storageId: v.optional(v.id("_storage")), // Convex Storage (after download)
+    externalUrl: v.optional(v.string()),     // original provider URL (pre-download)
+    mimeType: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    fileSize: v.optional(v.number()),        // bytes
+    duration: v.optional(v.number()),        // seconds (audio/video)
+    thumbnailStorageId: v.optional(v.id("_storage")),
+    caption: v.optional(v.string()),
+    transcript: v.optional(v.string()),      // STT result (audio/voice)
+    status: v.union(
+      v.literal("pending"),   // queued for download from provider
+      v.literal("stored"),    // safely in Convex Storage
+      v.literal("failed"),
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_message", ["messageId"])
+    .index("by_conversation", ["conversationId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  // ── OUTGOING MESSAGE QUEUE ─────────────────────────────────────────────────
+  // Every outbound message is written here before delivery. The Dispatcher
+  // reads from this queue, delivers via the appropriate ChannelProvider, and
+  // updates delivery status. Enables reliability, retry, and observability.
+  outgoingMessages: defineTable({
+    conversationId: v.id("conversations"),
+    messageId: v.id("messages"),
+    workspaceId: v.id("workspaces"),
+    channelId: v.id("channels"),
+    provider: v.string(),
+    // Delivery
+    status: v.union(
+      v.literal("queued"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("read"),
+      v.literal("failed"),
+    ),
+    providerMessageId: v.optional(v.string()),  // e.g. Meta wamid
+    attempts: v.number(),
+    lastAttemptAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_message", ["messageId"])
+    .index("by_conversation", ["conversationId"])
+    .index("by_workspace_status", ["workspaceId", "status", "createdAt"]),
+
+  // ── WEBHOOK LOGS ──────────────────────────────────────────────────────────
+  // Observability: every inbound webhook event logged (truncated to 8 KB).
+  webhookLogs: defineTable({
+    channelId: v.optional(v.id("channels")),
+    workspaceId: v.optional(v.id("workspaces")),
+    provider: v.string(),
+    event: v.string(),                  // e.g. "message.text", "status.delivered"
+    payload: v.string(),                // JSON string, truncated to 8 KB
+    processingStatus: v.union(
+      v.literal("ok"),
+      v.literal("error"),
+      v.literal("ignored"),
+    ),
+    errorMessage: v.optional(v.string()),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId", "receivedAt"])
+    .index("by_channel", ["channelId", "receivedAt"])
+    .index("by_provider", ["provider", "receivedAt"]),
 });

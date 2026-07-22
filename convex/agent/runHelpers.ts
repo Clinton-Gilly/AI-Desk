@@ -13,7 +13,9 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
+import { enqueueOutbound } from "../dispatcher";
 import { reserveAiMessage, refundAiMessage } from "../lib/entitlements";
 
 const citationValidator = v.array(
@@ -212,6 +214,21 @@ export const finalizeAgentMessage = internalMutation({
       upgradeCard,
     });
     await ctx.db.patch(conversationId, { lastMessageAt: Date.now() });
+
+    // ── Omnichannel: deliver the AI reply to external channels ──────────
+    // The AI never knows about WhatsApp. It writes the message body above;
+    // enqueueOutbound schedules the Dispatcher to push it to Meta API.
+    const convo = await ctx.db.get(conversationId);
+    if (convo?.channelId && convo.provider && convo.provider !== "website") {
+      await enqueueOutbound(ctx, {
+        conversationId,
+        messageId,
+        workspaceId: convo.workspaceId,
+        channelId: convo.channelId,
+        provider: convo.provider,
+      });
+    }
+
     return null;
   },
 });
